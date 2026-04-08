@@ -193,9 +193,10 @@ def fetch_nino34():
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
 
-    rows = []
+    rows34, rows12 = [], []
     for line in resp.text.strip().splitlines():
         parts = line.split()
+        # Format: YR MON NINO1+2 ANOM NINO3 ANOM NINO4 ANOM NINO3.4 ANOM
         if len(parts) < 10:
             continue
         if not parts[0].isdigit():
@@ -203,18 +204,28 @@ def fetch_nino34():
         try:
             year  = int(parts[0])
             month = int(parts[1])
-            val   = float(parts[9])   # NINO3.4 ANOM
-            if val not in (-99.99, -999.0):
-                rows.append({"year": year, "month": month, "nino34": val})
+            v34   = float(parts[9])  # NINO3.4 ANOM
+            v12   = float(parts[3])  # NINO1+2 ANOM (Coastal Nino)
+            if v34 not in (-99.99, -999.0):
+                rows34.append({"year": year, "month": month, "nino34": v34})
+            if v12 not in (-99.99, -999.0):
+                rows12.append({"year": year, "month": month, "nino12": v12})
         except ValueError:
             pass
 
-    df = pd.DataFrame(rows)
-    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
-    out = DATA_DIR / "nino34.csv"
-    df.to_csv(out, index=False)
-    print(f"Niño 3.4 saved: {len(df)} rows -> {out}")
-    return df
+    df34 = pd.DataFrame(rows34)
+    df34["date"] = pd.to_datetime(df34[["year", "month"]].assign(day=1))
+    out34 = DATA_DIR / "nino34.csv"
+    df34.to_csv(out34, index=False)
+    print(f"Nino 3.4 saved: {len(df34)} rows -> {out34}")
+
+    df12 = pd.DataFrame(rows12)
+    df12["date"] = pd.to_datetime(df12[["year", "month"]].assign(day=1))
+    out12 = DATA_DIR / "nino12.csv"
+    df12.to_csv(out12, index=False)
+    print(f"Nino 1+2 (Coastal) saved: {len(df12)} rows -> {out12}")
+
+    return df34
 
 
 # ── Atlantic Niño (ATL3) ──────────────────────────────────────────────────────
