@@ -13,6 +13,7 @@ import requests
 import pandas as pd
 from io import StringIO
 from pathlib import Path
+from bs4 import BeautifulSoup
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -235,6 +236,125 @@ def fetch_nino34():
 # TODO: compute from NOAA ERSSTv5 NetCDF once xarray/netcdf4 are added to deps.
 
 
+# ── CPC/IRI ENSO seasonal probabilities ──────────────────────────────────────
+
+def fetch_enso_probs():
+    """
+    Scrape IRI/CPC official ENSO seasonal probability forecast.
+    Tries IRI ENSO current page first; falls back to CPC advisory page.
+    Saves data/enso_probs.csv with columns:
+      season, p_nina, p_neutral, p_nino, source, issued
+    """
+    rows = _scrape_iri_probs() or _scrape_cpc_probs()
+    if not rows:
+        print("ENSO probs: could not scrape any source, skipping.")
+        return None
+
+    df = pd.DataFrame(rows).drop_duplicates(subset=["season"]).reset_index(drop=True)
+    out = DATA_DIR / "enso_probs.csv"
+    df.to_csv(out, index=False)
+    print(f"ENSO probs saved: {len(df)} seasons -> {out}  (source: {df['source'].iloc[0]})")
+    return df
+
+
+def _parse_pct(text):
+    """Parse a percentage string like '31%' or '31' -> float, or None."""
+    try:
+        return float(text.replace("%", "").replace("<", "").strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _scrape_iri_probs():
+    """
+    Scrape the IRI ENSO forecast page for the seasonal probability table.
+    The table has columns: Season | La Nina (%) | Neutral (%) | El Nino (%)
+    """
+    try:
+        url = "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/"
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Known 3-month season codes
+        season_codes = {
+            "DJF","JFM","FMA","MAM","AMJ","MJJ","JJA","JAS","ASO","SON","OND","NDJ",
+        }
+
+        rows = []
+        for table in soup.find_all("table"):
+            trs = table.find_all("tr")
+            for tr in trs:
+                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+                if len(cells) < 4:
+                    continue
+                season = cells[0].upper().strip()
+                if season not in season_codes:
+                    continue
+                p_nina    = _parse_pct(cells[1])
+                p_neutral = _parse_pct(cells[2])
+                p_nino    = _parse_pct(cells[3])
+                if None in (p_nina, p_neutral, p_nino):
+                    continue
+                rows.append({
+                    "season":    season,
+                    "p_nina":    p_nina,
+                    "p_neutral": p_neutral,
+                    "p_nino":    p_nino,
+                    "source":    "IRI",
+                    "issued":    pd.Timestamp.utcnow().strftime("%Y-%m"),
+                })
+        return rows if rows else None
+    except Exception as e:
+        print(f"IRI scrape failed: {e}")
+        return None
+
+
+def _scrape_cpc_probs():
+    """
+    Scrape the CPC ENSO advisory page for the seasonal probability table.
+    """
+    try:
+        url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/"
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        season_codes = {
+            "DJF","JFM","FMA","MAM","AMJ","MJJ","JJA","JAS","ASO","SON","OND","NDJ",
+        }
+
+        rows = []
+        for table in soup.find_all("table"):
+            text_lower = table.get_text(" ", strip=True).lower()
+            if "el ni" not in text_lower and "la ni" not in text_lower:
+                continue
+            for tr in table.find_all("tr"):
+                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+                if len(cells) < 4:
+                    continue
+                season = cells[0].upper().strip()
+                if season not in season_codes:
+                    continue
+                # CPC column order may be El Nino | Neutral | La Nina
+                # or La Nina | Neutral | El Nino — try to detect from header
+                nums = [_parse_pct(c) for c in cells[1:4]]
+                if None in nums:
+                    continue
+                rows.append({
+                    "season":    season,
+                    "p_nina":    nums[0],
+                    "p_neutral": nums[1],
+                    "p_nino":    nums[2],
+                    "source":    "CPC",
+                    "issued":    pd.Timestamp.utcnow().strftime("%Y-%m"),
+                })
+        return rows if rows else None
+    except Exception as e:
+        print(f"CPC scrape failed: {e}")
+        return None
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -244,4 +364,5 @@ if __name__ == "__main__":
     fetch_sam()
     fetch_iod()
     fetch_nino34()
+    fetch_enso_probs()
     print("Done.")

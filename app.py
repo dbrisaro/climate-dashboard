@@ -26,6 +26,17 @@ def load_all():
     return oni, mei, sam, iod, nino34, nino12
 
 @st.cache_data(ttl=3600)
+def load_enso_probs():
+    """Load official ENSO seasonal probabilities scraped from IRI/CPC."""
+    try:
+        df = pd.read_csv(f"{BASE_URL}/enso_probs.csv")
+        if len(df) >= 3 and {"season","p_nina","p_neutral","p_nino"}.issubset(df.columns):
+            return df
+        return None
+    except Exception:
+        return None
+
+@st.cache_data(ttl=3600)
 def load_seas5_mean():
     """Load SEAS5 ensemble-mean Nino3.4 forecast if available."""
     try:
@@ -192,54 +203,6 @@ def compute_damped_persistence(n_leads=7, r=0.85, sigma_clim=1.0):
     return pd.DataFrame(rows)
 
 
-@st.cache_data(ttl=3600)
-def fetch_cpc_enso_probs():
-    """
-    Scrape the CPC ENSO seasonal probability forecast table.
-    Returns a DataFrame with columns: season, p_nino, p_neutral, p_nina
-    or None if the page cannot be parsed.
-    Source: https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/
-    """
-    try:
-        url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/"
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        rows_out = []
-        # CPC page has a table with columns like:
-        # Season | El Nino (%) | Neutral (%) | La Nina (%)
-        for table in soup.find_all("table"):
-            text = table.get_text(" ", strip=True).lower()
-            if "el ni" not in text and "la ni" not in text:
-                continue
-            trs = table.find_all("tr")
-            for tr in trs:
-                tds = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
-                if len(tds) < 4:
-                    continue
-                # try to parse numeric probability triplet
-                nums = []
-                for cell in tds[1:4]:
-                    cleaned = cell.replace("%", "").replace("<", "").strip()
-                    try:
-                        nums.append(float(cleaned))
-                    except ValueError:
-                        break
-                if len(nums) == 3:
-                    rows_out.append({
-                        "season":    tds[0],
-                        "p_nino":    nums[0],
-                        "p_neutral": nums[1],
-                        "p_nina":    nums[2],
-                    })
-
-        if rows_out:
-            return pd.DataFrame(rows_out)
-        return None
-    except Exception:
-        return None
-
 
 def make_plume_chart(fc, seas5=None):
     """Plotly figure with damped-persistence forecast plume + optional SEAS5 mean."""
@@ -312,53 +275,65 @@ def make_plume_chart(fc, seas5=None):
     return fig
 
 
-def make_prob_chart(fc, cpc_probs=None):
+def make_prob_chart(enso_probs=None, fc=None):
     """
-    Stacked bar chart: P(El Nino) / P(Neutral) / P(La Nina) per forecast month.
-    Uses CPC official probabilities if available, otherwise damped persistence.
+    Grouped bar chart matching NOAA CPC style:
+    La Nina (blue) | Neutral (gray) | El Nino (red) per season.
+    Uses official IRI/CPC data if available, else damped-persistence fallback.
     """
-    if cpc_probs is not None and len(cpc_probs) >= 3:
-        df    = cpc_probs.copy()
-        title = "ENSO seasonal probability forecast (NOAA CPC)"
+    if enso_probs is not None and len(enso_probs) >= 3:
+        df     = enso_probs.copy()
         x_vals = df["season"].tolist()
+        title  = "ENSO seasonal probability forecast (NOAA CPC / IRI)"
+        source_note = df["source"].iloc[0] if "source" in df.columns else "IRI/CPC"
+        issued      = df["issued"].iloc[0]  if "issued"  in df.columns else ""
+        subtitle = f"Source: {source_note}  |  Issued: {issued}"
     else:
-        df    = fc.copy()
-        df["season"] = df["date"].dt.strftime("%b %Y")
-        title = "ENSO probability forecast (damped persistence)"
+        df     = fc.copy() if fc is not None else pd.DataFrame()
+        df["season"] = df["date"].dt.strftime("%b %Y") if "date" in df.columns else []
         x_vals = df["season"].tolist()
+        title  = "ENSO probability forecast (damped persistence)"
+        subtitle = "Based on current ONI and exponential decay model"
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name="El Nino",
-        x=x_vals,
-        y=df["p_nino"],
-        marker_color="rgba(220,50,50,0.80)",
-        hovertemplate="%{x}<br>El Nino: %{y:.0f}%<extra></extra>",
-    ))
-    fig.add_trace(go.Bar(
-        name="Neutral",
-        x=x_vals,
-        y=df["p_neutral"],
-        marker_color="rgba(150,150,150,0.65)",
-        hovertemplate="%{x}<br>Neutral: %{y:.0f}%<extra></extra>",
-    ))
+
+    # La Nina — blue
     fig.add_trace(go.Bar(
         name="La Nina",
         x=x_vals,
         y=df["p_nina"],
-        marker_color="rgba(50,100,220,0.80)",
-        hovertemplate="%{x}<br>La Nina: %{y:.0f}%<extra></extra>",
+        marker_color="rgba(50,100,220,0.85)",
+        hovertemplate="<b>%{x}</b><br>La Nina: <b>%{y:.0f}%</b><extra></extra>",
+    ))
+    # Neutral — gray
+    fig.add_trace(go.Bar(
+        name="Neutral",
+        x=x_vals,
+        y=df["p_neutral"],
+        marker_color="rgba(160,160,160,0.70)",
+        hovertemplate="<b>%{x}</b><br>Neutral: <b>%{y:.0f}%</b><extra></extra>",
+    ))
+    # El Nino — red
+    fig.add_trace(go.Bar(
+        name="El Nino",
+        x=x_vals,
+        y=df["p_nino"],
+        marker_color="rgba(220,50,50,0.85)",
+        hovertemplate="<b>%{x}</b><br>El Nino: <b>%{y:.0f}%</b><extra></extra>",
     ))
 
     fig.update_layout(
-        barmode="stack",
-        title=title,
-        yaxis_title="Probability (%)",
-        yaxis=dict(range=[0, 100]),
-        height=360,
+        barmode="group",
+        bargap=0.20,
+        bargroupgap=0.05,
+        title=dict(text=f"{title}<br><sup>{subtitle}</sup>"),
+        yaxis_title="Percent chance (%)",
+        yaxis=dict(range=[0, 100], dtick=10, gridcolor="rgba(255,255,255,0.08)"),
+        xaxis_title="Season",
+        height=400,
         template="plotly_dark",
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        margin=dict(l=10, r=10, t=60, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.08, x=0),
         hovermode="x unified",
     )
     return fig
@@ -482,22 +457,26 @@ with tab2:
     # ── ENSO probability chart ────────────────────────────────────────────────
     st.markdown("### ENSO state probabilities")
 
-    cpc_probs = fetch_cpc_enso_probs()
-    if cpc_probs is not None:
-        st.caption("Source: NOAA CPC official seasonal probability forecast.")
+    enso_probs = load_enso_probs()
+    if enso_probs is not None:
+        issued = enso_probs["issued"].iloc[0] if "issued" in enso_probs.columns else ""
+        source = enso_probs["source"].iloc[0] if "source" in enso_probs.columns else "IRI/CPC"
+        st.caption(f"Official {source} seasonal probability forecast  |  Issued: {issued}  |  Updated daily.")
     else:
         st.caption(
-            "NOAA CPC probability table could not be loaded. "
-            "Showing probabilities derived from the damped-persistence forecast."
+            "Official IRI/CPC probability data not yet available (runs with daily GitHub Actions). "
+            "Showing probabilities from the damped-persistence model in the meantime."
         )
 
-    st.plotly_chart(make_prob_chart(fc, cpc_probs), use_container_width=True)
+    st.plotly_chart(make_prob_chart(enso_probs, fc), use_container_width=True)
 
     # Probability table
     show_table = st.toggle("Show probability table", value=False)
     if show_table:
-        if cpc_probs is not None:
-            st.dataframe(cpc_probs, hide_index=True, use_container_width=True)
+        if enso_probs is not None:
+            disp = enso_probs[["season", "p_nina", "p_neutral", "p_nino"]].copy()
+            disp.columns = ["Season", "La Nina (%)", "Neutral (%)", "El Nino (%)"]
+            st.dataframe(disp, hide_index=True, use_container_width=True)
         else:
             disp = fc[["date", "mean", "p_nino", "p_neutral", "p_nina"]].copy()
             disp["date"] = disp["date"].dt.strftime("%b %Y")
