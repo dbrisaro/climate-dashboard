@@ -773,21 +773,23 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
         fig.add_trace(go.Scatter(
             x=border_lons, y=border_lats,
             mode="lines",
-            line=dict(color="rgba(220,220,220,0.75)", width=0.8),
+            line=dict(color="rgba(60,60,60,0.85)", width=0.9),
             hoverinfo="skip",
             showlegend=False,
         ))
 
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
-        template="plotly_dark",
+        title=dict(text=title, x=0.5, xanchor="center",
+                   font=dict(size=14, color="#222")),
         height=560,
         margin=dict(l=10, r=10, t=40, b=10),
-        xaxis=dict(range=[-92, -28], title="Longitude", showgrid=False,
-                   zeroline=False, constrain="domain"),
-        yaxis=dict(range=[-58, 16],  title="Latitude",  showgrid=False,
-                   zeroline=False, scaleanchor="x", scaleratio=1),
-        plot_bgcolor="rgba(17,17,34,1)",
+        xaxis=dict(range=[-92, -28], title="", showgrid=False,
+                   zeroline=False, constrain="domain",
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        yaxis=dict(range=[-58, 16], title="", showgrid=False,
+                   zeroline=False, scaleanchor="x", scaleratio=1,
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
