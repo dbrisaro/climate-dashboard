@@ -139,7 +139,7 @@ def make_iri_plume_chart(data, oni_df):
             mode="lines+markers",
             name=m["model"],
             line=dict(color=color, width=1.4),
-            marker=dict(size=5, symbol=marker, color=color),
+            marker=dict(size=8, symbol=marker, color=color),
             hovertemplate=f"<b>{m['model']}</b>: %{{y:.2f}} C<extra></extra>",
         ))
 
