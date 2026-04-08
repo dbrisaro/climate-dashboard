@@ -334,9 +334,9 @@ def make_prob_chart(enso_probs=None, fc=None):
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(
             orientation="h",
-            yanchor="top", y=0.99,
-            xanchor="left", x=0.01,
-            bgcolor="rgba(0,0,0,0.4)",
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
+            bgcolor="rgba(0,0,0,0)",
             borderwidth=0,
         ),
         hovermode="x unified",
