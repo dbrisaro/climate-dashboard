@@ -228,7 +228,6 @@ with tab2:
     iri_figs = get_iri_figures()
 
     iri_labels = {
-        "figure1": "Nino 3.4 SST forecast plume",
         "figure2": "Multi-model forecast comparison",
         "figure3": "Probabilistic ENSO forecast",
         "figure5": "Precipitation anomaly forecast",
@@ -237,12 +236,14 @@ with tab2:
     }
 
     if iri_figs:
-        for url in iri_figs:
+        # Skip figure1 (historical SST time series, already shown in Current state tab)
+        filtered = [u for u in iri_figs if "figure1" not in u]
+        for url in filtered:
             label = next(
                 (v for k, v in iri_labels.items() if k in url),
                 "IRI forecast figure",
             )
-            with st.expander(label, expanded=(iri_figs.index(url) < 3)):
+            with st.expander(label, expanded=(filtered.index(url) < 3)):
                 st.image(url, width=700)
     else:
         st.warning("Could not load IRI figures. Visit the source directly.")
