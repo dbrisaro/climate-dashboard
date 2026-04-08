@@ -733,13 +733,11 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
         if vrange is None:
             vrange = max(abs(float(vals.quantile(0.02))),
                          abs(float(vals.quantile(0.98))), step)
-        # Round vrange up to nearest step multiple so bins are symmetric
-        import math as _math
-        vrange = round(_math.ceil(float(vrange) / step) * step, 6)
+        vrange = round(math.ceil(float(vrange) / step) * step, 6)
         zmin, zmax = -vrange, vrange
     else:
         zmin = 0.0
-        zmax = round(_math.ceil(float(vals.quantile(0.98)) / step) * step, 6)
+        zmax = round(math.ceil(float(vals.quantile(0.98)) / step) * step, 6)
         if zmax == 0:
             zmax = step
 
