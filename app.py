@@ -978,10 +978,11 @@ with tab2:
 with tab3:
     st.subheader("Seasonal temperature and precipitation forecasts")
     st.markdown(
-        "Tercile probability forecasts from the **CPC NMME** multi-model ensemble. "
-        "Colors show which category is most likely — "
-        "🟤 below-normal · ⬜ equal chances · 🟢 above-normal — "
-        "only where probability exceeds 40%."
+        "Probabilistic seasonal forecasts from the **CPC NMME** multi-model ensemble. "
+        "Each map shows the forecast for a **3-month overlapping season** "
+        "(e.g. MJJ = May+Jun+Jul average), all initialized from the same month. "
+        "Colors show which tercile category is most likely: "
+        "🟤 below-normal · ⬜ equal chances (no category ≥ 40%) · 🟢 above-normal."
     )
 
     nmme = load_nmme_probs()
@@ -995,22 +996,37 @@ with tab3:
 
         fc_dates = sorted(ref_df["forecast_date"].unique())
 
+        def _seas_label(date_str):
+            """Convert 'YYYY-MM' to '3-month season' label.
+            Convention: the labeled month is the FIRST month of the 3-month season.
+            e.g. '2026-05' → 'MJJ 2026'  (May + Jun + Jul)
+            """
+            t = pd.Timestamp(date_str + "-01")
+            months = ["Jan","Feb","Mar","Apr","May","Jun",
+                      "Jul","Aug","Sep","Oct","Nov","Dec"]
+            m0 = t.month - 1          # 0-indexed
+            m1 = (m0 + 1) % 12
+            m2 = (m0 + 2) % 12
+            season = months[m0] + months[m1] + months[m2]
+            return f"{season} {t.year}"
+
         sel_date = st.radio(
-            "Forecast month",
+            "Forecast season (3-month average, initialized "
+            f"{pd.Timestamp(str(int(row0['init_year']))+'-'+str(int(row0['init_month'])).zfill(2)+'-01').strftime('%B %Y')})",
             options=fc_dates,
-            format_func=lambda d: pd.Timestamp(d + "-01").strftime("%B %Y"),
+            format_func=_seas_label,
             horizontal=True,
         )
         st.caption(init_label)
 
         col_t, col_p = st.columns(2)
+        seas_str = _seas_label(sel_date)
 
         with col_t:
             if "tmp2m" in nmme:
                 sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
-                month_str = pd.Timestamp(sel_date + "-01").strftime("%B %Y")
                 st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Temperature — {month_str}"),
+                    make_nmme_prob_map(sub, f"Temperature — {seas_str}"),
                     use_container_width=True,
                 )
             else:
@@ -1019,9 +1035,8 @@ with tab3:
         with col_p:
             if "prate" in nmme:
                 sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
-                month_str = pd.Timestamp(sel_date + "-01").strftime("%B %Y")
                 st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Precipitation — {month_str}"),
+                    make_nmme_prob_map(sub, f"Precipitation — {seas_str}"),
                     use_container_width=True,
                 )
             else:
