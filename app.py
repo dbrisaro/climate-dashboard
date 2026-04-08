@@ -594,7 +594,6 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
         showocean=True,       oceancolor="rgba(15,20,40,0.7)",
         showlakes=False,
         bgcolor="rgba(0,0,0,0)",
-        projection_type="mercator",
     )
     fig.update_layout(
         title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
