@@ -690,51 +690,6 @@ with tab2:
             disp.columns = ["Month", "Mean anomaly (C)", "P(El Nino) %", "P(Neutral) %", "P(La Nina) %"]
             st.dataframe(disp, hide_index=True, use_container_width=True)
 
-    st.divider()
-
-    # ── IRI figures ───────────────────────────────────────────────────────────
-    st.markdown("### IRI - ENSO forecast graphics")
-    iri_figs = get_iri_figures()
-
-    iri_labels = {
-        "figure1": "CPC ENSO forecast",
-        "figure3": "IRI ENSO forecast",
-        "figure5": "Model-based prediction percentiles",
-        "figure6": "Model-based prediction distribution",
-        "figure7": "IOD model-based forecast",
-    }
-
-    if iri_figs:
-        # Skip figure2 (historical SST time series, already shown in Current state tab)
-        filtered = [u for u in iri_figs if "figure2" not in u]
-        for url in filtered:
-            label = next(
-                (v for k, v in iri_labels.items() if k in url),
-                "IRI forecast figure",
-            )
-            with st.expander(label, expanded=(filtered.index(url) < 2)):
-                st.image(url, width=700)
-    else:
-        st.warning("Could not load IRI figures. Visit the source directly.")
-        st.link_button(
-            "Open IRI ENSO forecast page",
-            "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
-        )
-
-    st.divider()
-
-    # ── CPC SST image ─────────────────────────────────────────────────────────
-    st.markdown("### NOAA CPC - SST anomaly")
-    cpc_sst_url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_update/sstweek_c.gif"
-    try:
-        r = requests.head(cpc_sst_url, timeout=10)
-        if r.status_code == 200:
-            st.image(cpc_sst_url, caption="NOAA CPC - Weekly SST anomaly", width=700)
-        else:
-            raise ValueError()
-    except Exception:
-        st.warning("Could not load CPC SST image.")
-
     st.link_button(
         "Open full NOAA CPC ENSO status report (PDF)",
         "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/lanina/enso_evolution-status-fcsts-web.pdf",
