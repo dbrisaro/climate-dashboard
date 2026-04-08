@@ -228,16 +228,16 @@ with tab2:
     iri_figs = get_iri_figures()
 
     iri_labels = {
-        "figure2": "Multi-model forecast comparison",
-        "figure3": "Probabilistic ENSO forecast",
-        "figure5": "Precipitation anomaly forecast",
-        "figure6": "Temperature anomaly forecast",
-        "figure7": "500 hPa anomaly forecast",
+        "figure1": "CPC ENSO forecast",
+        "figure3": "IRI ENSO forecast",
+        "figure5": "Model-based prediction percentiles",
+        "figure6": "Model-based prediction distribution",
+        "figure7": "IOD model-based forecast",
     }
 
     if iri_figs:
-        # Skip figure1 (historical SST time series, already shown in Current state tab)
-        filtered = [u for u in iri_figs if "figure1" not in u]
+        # Skip figure2 (historical SST time series, already shown in Current state tab)
+        filtered = [u for u in iri_figs if "figure2" not in u]
         for url in filtered:
             label = next(
                 (v for k, v in iri_labels.items() if k in url),
