@@ -31,6 +31,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 LAT_N, LAT_S =  5.0, -5.0
 LON_W, LON_E = -170.0, -120.0   # will wrap to 190-240 if needed
 
+# South America bounding box
+SA_LAT_N, SA_LAT_S = 15.0, -60.0
+SA_LON_W, SA_LON_E = -90.0, -30.0
+
 
 def get_cds_client():
     key = os.environ.get("CDSAPI_KEY")
@@ -166,5 +170,111 @@ def fetch_seas5_nino34():
     return df
 
 
+def _extract_sa_grid(nc_path, init_year, init_month):
+    """
+    Load a downloaded SEAS5 NetCDF, subset to South America,
+    average over all lead months and any time/ensemble dims,
+    and return a flat DataFrame with columns: lat, lon, anom.
+    Longitudes are normalised to -180/180.
+    """
+    ds  = xr.open_dataset(nc_path)
+    var = list(ds.data_vars)[0]
+    da  = ds[var]
+
+    dims    = set(da.dims)
+    lat_dim = next(d for d in dims if d in ("latitude", "lat"))
+    lon_dim = next(d for d in dims if d in ("longitude", "lon"))
+
+    # Subset SA bounding box (handle 0-360 and -180/180 conventions)
+    lons = da[lon_dim].values
+    if lons.max() > 180:
+        lon_sel = da.sel({
+            lat_dim: slice(SA_LAT_N, SA_LAT_S),
+            lon_dim: slice(360 + SA_LON_W, 360 + SA_LON_E),
+        })
+    else:
+        lon_sel = da.sel({
+            lat_dim: slice(SA_LAT_N, SA_LAT_S),
+            lon_dim: slice(SA_LON_W, SA_LON_E),
+        })
+
+    # Average over all dims that are not lat/lon (leads, time, member …)
+    extra = [d for d in lon_sel.dims if d not in (lat_dim, lon_dim)]
+    spatial = lon_sel.mean(dim=extra) if extra else lon_sel
+
+    df = (
+        spatial
+        .to_dataframe(name="anom")
+        .reset_index()
+        .rename(columns={lat_dim: "lat", lon_dim: "lon"})
+    )
+    df["anom"] = df["anom"].round(4)
+
+    # Normalise longitude to -180/180
+    if df["lon"].max() > 180:
+        df["lon"] = df["lon"].apply(lambda x: x - 360 if x > 180 else x)
+
+    df = df[["lat", "lon", "anom"]].dropna(subset=["anom"])
+    df["init_year"]  = init_year
+    df["init_month"] = init_month
+    return df
+
+
+def fetch_seas5_sa_maps():
+    """
+    Download SEAS5 ensemble-mean 2m temperature anomaly and
+    total precipitation anomaly rate for South America (leads 1-3).
+    Saves:
+      data/forecasts/seas5_t2m_anom_SA.csv
+      data/forecasts/seas5_prcp_anom_SA.csv
+    """
+    now   = datetime.utcnow()
+    year  = str(now.year)
+    month = f"{now.month:02d}"
+
+    VARS = [
+        ("t2m",  "2m_temperature_anomaly",          "seas5_t2m_anom_SA"),
+        ("prcp", "total_precipitation_anomaly_rate", "seas5_prcp_anom_SA"),
+    ]
+
+    c = get_cds_client()
+
+    for tag, cds_var, out_stem in VARS:
+        nc_path = DATA_DIR / f"seas5_{tag}_SA_{year}{month}.nc"
+        out_csv = DATA_DIR / f"{out_stem}.csv"
+
+        if not nc_path.exists():
+            print(f"Downloading SEAS5 {cds_var} {year}-{month} …")
+            try:
+                c.retrieve(
+                    "seasonal-postprocessed-single-levels",
+                    {
+                        "originating_centre": "ecmwf",
+                        "system":             "51",
+                        "variable":           cds_var,
+                        "product_type":       "ensemble_mean",
+                        "year":               year,
+                        "month":              month,
+                        "leadtime_month":     ["1", "2", "3"],
+                        "format":             "netcdf",
+                    },
+                    str(nc_path),
+                )
+                print(f"Downloaded -> {nc_path}  ({nc_path.stat().st_size/1024:.0f} kB)")
+            except Exception as e:
+                print(f"ERROR downloading {cds_var}: {e}")
+                continue
+        else:
+            print(f"Using cached {nc_path}")
+
+        try:
+            df = _extract_sa_grid(nc_path, int(year), int(month))
+            df.to_csv(out_csv, index=False)
+            print(f"Saved {out_stem}: {len(df)} grid points -> {out_csv}")
+        except Exception as e:
+            print(f"ERROR processing {nc_path}: {e}")
+
+
 if __name__ == "__main__":
     fetch_seas5_nino34()
+    fetch_seas5_sa_maps()

@@ -23,6 +23,12 @@ jobs:
       - name: Fetch indices
         run: python scripts/fetch_indices.py
 
+      - name: Fetch forecasts
+        env:
+          CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+          CDSAPI_URL: https://cds.climate.copernicus.eu/api
+        run: python scripts/fetch_forecasts.py
+
       - name: Commit updated CSVs
         run: |
           git config user.name  "github-actions[bot]"

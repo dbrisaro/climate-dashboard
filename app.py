@@ -529,29 +529,74 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=3600)
-def load_iri_seasonal_maps():
+def load_seas5_sa_maps():
     """
-    Scrape og:image URLs from the IRI NMME seasonal forecast maproom pages.
-    These are dynamically generated GIF images, verified to return 200 OK.
-    Returns dict with 'temp' and 'prcp' image URLs, or None on failure.
+    Load SEAS5 T2m and precip anomaly grids for South America from GitHub data.
+    Returns dict with 't2m' and/or 'prcp' DataFrames, or None.
     """
-    BASE = "http://iridl.ldeo.columbia.edu"
-    sources = {
-        "temp": f"{BASE}/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/temp_full.html",
-        "prcp": f"{BASE}/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/precip_full.html",
-    }
     result = {}
-    for key, url in sources.items():
+    for key, fname in [("t2m", "seas5_t2m_anom_SA"), ("prcp", "seas5_prcp_anom_SA")]:
         try:
-            r = requests.get(url, timeout=20)
-            soup = BeautifulSoup(r.text, "html.parser")
-            og = soup.find("meta", property="og:image")
-            if og and og.get("content"):
-                src = og["content"]
-                result[key] = BASE + src if src.startswith("/") else src
+            df = pd.read_csv(f"{BASE_URL}/forecasts/{fname}.csv")
+            if len(df) > 10 and "anom" in df.columns:
+                result[key] = df
         except Exception:
             pass
     return result if result else None
+
+
+def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None):
+    """
+    Interactive Plotly geo scatter map of a SEAS5 anomaly field over South America.
+    Uses Scattergeo with country borders — fully interactive, no pixels.
+    """
+    vals = df["anom"]
+    if vrange is None:
+        vrange = max(abs(vals.quantile(0.02)), abs(vals.quantile(0.98)), 0.3)
+    vrange = round(vrange, 2)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scattergeo(
+        lat=df["lat"],
+        lon=df["lon"],
+        mode="markers",
+        marker=dict(
+            color=vals,
+            colorscale=colorscale,
+            cmin=-vrange,
+            cmax= vrange,
+            size=9,
+            opacity=0.9,
+            colorbar=dict(
+                title=dict(text=cbar_title, side="right"),
+                thickness=14,
+                len=0.75,
+                outlinewidth=0,
+            ),
+        ),
+        hovertemplate=(
+            "Lat: %{lat:.1f}°, Lon: %{lon:.1f}°<br>"
+            + cbar_title + ": <b>%{marker.color:.2f}</b><extra></extra>"
+        ),
+    ))
+    fig.update_geos(
+        scope="south america",
+        showcoastlines=True,  coastlinecolor="rgba(220,220,220,0.7)",
+        showborders=True,     bordercolor="rgba(200,200,200,0.5)",
+        showland=True,        landcolor="rgba(35,35,35,0.6)",
+        showocean=True,       oceancolor="rgba(15,20,40,0.7)",
+        showlakes=False,
+        bgcolor="rgba(0,0,0,0)",
+        projection_type="mercator",
+    )
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
+        template="plotly_dark",
+        height=580,
+        margin=dict(l=0, r=0, t=40, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
 
 
 st.title("Climate Oscillation Monitor")
@@ -739,89 +784,58 @@ with tab2:
 with tab3:
     st.subheader("Seasonal temperature and precipitation forecasts")
     st.markdown(
-        "Probabilistic seasonal forecasts from the NMME (North American Multi-Model Ensemble) "
-        "via IRI (Columbia University). Maps show the probability of above or below normal "
-        "conditions for the upcoming 3-month season."
+        "ECMWF SEAS5 ensemble-mean anomaly forecasts for South America, "
+        "averaged over leads 1–3 (next 3 months). "
+        "Data downloaded daily from Copernicus C3S."
     )
 
-    seasonal_maps = load_iri_seasonal_maps()
+    seas5_maps = load_seas5_sa_maps()
 
-    if seasonal_maps:
+    if seas5_maps:
+        init_info = ""
+        for key in ("t2m", "prcp"):
+            if key in seas5_maps:
+                row = seas5_maps[key].iloc[0]
+                init_info = f"Init: {int(row['init_month']):02d}/{int(row['init_year'])}  |  Leads 1–3"
+                break
+        st.caption(f"Source: ECMWF SEAS5 via Copernicus C3S  |  {init_info}  |  Updated monthly")
+
         col_t, col_p = st.columns(2)
 
         with col_t:
-            st.markdown("#### Temperature")
-            if "temp" in seasonal_maps:
-                st.image(
-                    seasonal_maps["temp"],
-                    caption="Probability of above/below normal temperature (NMME, IRI)",
+            if "t2m" in seas5_maps:
+                st.plotly_chart(
+                    make_seas5_geo_map(
+                        seas5_maps["t2m"],
+                        title="2m Temperature Anomaly (°C)",
+                        colorscale="RdBu_r",
+                        cbar_title="Anomaly (°C)",
+                    ),
                     use_container_width=True,
                 )
             else:
-                st.warning("Temperature map not available.")
+                st.warning("Temperature forecast not yet available.")
 
         with col_p:
-            st.markdown("#### Precipitation")
-            if "prcp" in seasonal_maps:
-                st.image(
-                    seasonal_maps["prcp"],
-                    caption="Probability of above/below normal precipitation (NMME, IRI)",
+            if "prcp" in seas5_maps:
+                st.plotly_chart(
+                    make_seas5_geo_map(
+                        seas5_maps["prcp"],
+                        title="Precipitation Anomaly Rate (mm/day)",
+                        colorscale="RdYlGn",
+                        cbar_title="Anomaly (mm/day)",
+                    ),
                     use_container_width=True,
                 )
             else:
-                st.warning("Precipitation map not available.")
+                st.warning("Precipitation forecast not yet available.")
 
-        st.caption(
-            "Source: IRI/LDEO Climate Data Library — "
-            "NMME Seasonal Forecasts — Updated monthly  |  "
-            "[Interactive maproom](http://iridl.ldeo.columbia.edu/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/)"
-        )
     else:
-        st.warning("Could not load IRI seasonal forecast maps.")
-        st.link_button(
-            "Open IRI NMME Seasonal Forecast Maproom",
-            "http://iridl.ldeo.columbia.edu/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/",
+        st.info(
+            "Seasonal forecast maps will be available after the first automated data update "
+            "(runs daily via GitHub Actions). "
+            "The SEAS5 data is downloaded from Copernicus C3S."
         )
-
-    st.divider()
-
-    # ── CPC 90-day seasonal outlooks ─────────────────────────────────────────
-    st.markdown("### NOAA CPC 90-day seasonal outlook")
-    st.markdown(
-        "Probability of above or below normal temperature and precipitation "
-        "for the next 3 months. Colors indicate which tercile is most likely."
-    )
-
-    cpc_col1, cpc_col2 = st.columns(2)
-    cpc_temp_url = "https://www.cpc.ncep.noaa.gov/products/predictions/multi_season/13_seasonal_outlooks/color/t.gif"
-    cpc_prcp_url = "https://www.cpc.ncep.noaa.gov/products/predictions/multi_season/13_seasonal_outlooks/color/p.gif"
-
-    with cpc_col1:
-        st.markdown("#### Temperature")
-        try:
-            r = requests.head(cpc_temp_url, timeout=8)
-            if r.status_code == 200:
-                st.image(cpc_temp_url, caption="CPC 90-day temperature outlook", use_container_width=True)
-            else:
-                raise ValueError()
-        except Exception:
-            st.warning("CPC temperature outlook not available.")
-
-    with cpc_col2:
-        st.markdown("#### Precipitation")
-        try:
-            r = requests.head(cpc_prcp_url, timeout=8)
-            if r.status_code == 200:
-                st.image(cpc_prcp_url, caption="CPC 90-day precipitation outlook", use_container_width=True)
-            else:
-                raise ValueError()
-        except Exception:
-            st.warning("CPC precipitation outlook not available.")
-
-    st.caption(
-        "Source: NOAA CPC 13-season outlooks  |  "
-        "[Full CPC outlooks page](https://www.cpc.ncep.noaa.gov/products/predictions/90day/)"
-    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
