@@ -243,7 +243,7 @@ with tab2:
                 "IRI forecast figure",
             )
             with st.expander(label, expanded=(iri_figs.index(url) < 3)):
-                st.image(url, use_container_width=True)
+                st.image(url, width=700)
     else:
         st.warning("Could not load IRI figures. Visit the source directly.")
         st.link_button(
@@ -259,7 +259,7 @@ with tab2:
     try:
         r = requests.head(cpc_sst_url, timeout=10)
         if r.status_code == 200:
-            st.image(cpc_sst_url, caption="NOAA CPC - Weekly SST anomaly", use_container_width=True)
+            st.image(cpc_sst_url, caption="NOAA CPC - Weekly SST anomaly", width=700)
         else:
             raise ValueError()
     except Exception:
