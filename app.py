@@ -307,6 +307,28 @@ def detect_enso_events(oni_df, threshold=0.5, min_months=5):
 
 # ── Forecast helpers ──────────────────────────────────────────────────────────
 
+def compute_enso_climatology(oni_df, threshold=0.5):
+    """
+    Compute historical ENSO state climatology from the ONI record.
+    Returns a DataFrame with columns: season, clim_nino, clim_neutral, clim_nina
+    for each 3-month season (DJF through NDJ).
+    """
+    season_order = ["DJF","JFM","FMA","MAM","AMJ","MJJ","JJA","JAS","ASO","SON","OND","NDJ"]
+    df = oni_df.dropna(subset=["oni", "season"]).copy()
+    rows = []
+    for s in season_order:
+        sub = df[df["season"] == s]["oni"]
+        if len(sub) < 5:
+            continue
+        n       = len(sub)
+        p_nino    = (sub >=  threshold).sum() / n * 100
+        p_nina    = (sub <= -threshold).sum() / n * 100
+        p_neutral = 100 - p_nino - p_nina
+        rows.append({"season": s, "clim_nino": round(p_nino,1),
+                     "clim_neutral": round(p_neutral,1), "clim_nina": round(p_nina,1)})
+    return pd.DataFrame(rows)
+
+
 def _norm_cdf(x):
     """Standard normal CDF via math.erf (no scipy needed)."""
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
@@ -425,69 +447,77 @@ def make_plume_chart(fc, seas5=None):
     return fig
 
 
-def make_prob_chart(enso_probs=None, fc=None):
+def make_prob_chart(enso_probs=None, fc=None, clim=None):
     """
-    Grouped bar chart matching NOAA CPC style:
-    La Nina (blue) | Neutral (gray) | El Nino (red) per season.
-    Uses official IRI/CPC data if available, else damped-persistence fallback.
+    Grouped bar chart matching IRI/CPC style:
+    La Nina (blue) | Neutral (gray) | El Nino (red) per season,
+    with optional climatology lines overlaid.
     """
     if enso_probs is not None and len(enso_probs) >= 3:
         df     = enso_probs.copy()
         x_vals = df["season"].tolist()
-        title  = "ENSO seasonal probability forecast (NOAA CPC / IRI)"
-        source_note = df["source"].iloc[0] if "source" in df.columns else "IRI/CPC"
-        issued      = df["issued"].iloc[0]  if "issued"  in df.columns else ""
-        subtitle = f"Source: {source_note}  |  Issued: {issued}"
     else:
         df     = fc.copy() if fc is not None else pd.DataFrame()
         df["season"] = df["date"].dt.strftime("%b %Y") if "date" in df.columns else []
         x_vals = df["season"].tolist()
-        title  = "ENSO probability forecast (damped persistence)"
-        subtitle = "Based on current ONI and exponential decay model"
 
     fig = go.Figure()
 
-    # La Nina — blue
+    # ── Bars ──────────────────────────────────────────────────────────────────
     fig.add_trace(go.Bar(
-        name="La Nina",
-        x=x_vals,
-        y=df["p_nina"],
+        name="La Nina", x=x_vals, y=df["p_nina"],
         marker_color="rgba(50,100,220,0.85)",
         hovertemplate="<b>%{x}</b><br>La Nina: <b>%{y:.0f}%</b><extra></extra>",
     ))
-    # Neutral — gray
     fig.add_trace(go.Bar(
-        name="Neutral",
-        x=x_vals,
-        y=df["p_neutral"],
+        name="Neutral", x=x_vals, y=df["p_neutral"],
         marker_color="rgba(160,160,160,0.70)",
         hovertemplate="<b>%{x}</b><br>Neutral: <b>%{y:.0f}%</b><extra></extra>",
     ))
-    # El Nino — red
     fig.add_trace(go.Bar(
-        name="El Nino",
-        x=x_vals,
-        y=df["p_nino"],
+        name="El Nino", x=x_vals, y=df["p_nino"],
         marker_color="rgba(220,50,50,0.85)",
         hovertemplate="<b>%{x}</b><br>El Nino: <b>%{y:.0f}%</b><extra></extra>",
     ))
+
+    # ── Climatology lines ─────────────────────────────────────────────────────
+    if clim is not None and len(clim) > 0:
+        # Align climatology to the same seasons as the forecast
+        clim_aligned = clim[clim["season"].isin(x_vals)].set_index("season").reindex(x_vals)
+        clim_specs = [
+            ("clim_nina",    "La Nina clim.",  "rgba(80,130,255,0.9)"),
+            ("clim_neutral", "Neutral clim.",  "rgba(200,200,200,0.9)"),
+            ("clim_nino",    "El Nino clim.",  "rgba(255,80,80,0.9)"),
+        ]
+        for col, label, color in clim_specs:
+            if col not in clim_aligned.columns:
+                continue
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=clim_aligned[col].tolist(),
+                mode="lines",
+                name=label,
+                line=dict(color=color, width=2, dash="solid"),
+                hovertemplate=f"<b>{label}</b> %{{x}}: %{{y:.0f}}%<extra></extra>",
+            ))
 
     fig.update_layout(
         barmode="group",
         bargap=0.20,
         bargroupgap=0.05,
-        yaxis_title="Percent chance (%)",
+        yaxis_title="Probability (%)",
         yaxis=dict(range=[0, 100], dtick=10, gridcolor="rgba(255,255,255,0.08)"),
         xaxis_title="Season",
         height=500,
         template="plotly_dark",
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(
-            orientation="h",
-            yanchor="bottom", y=1.02,
-            xanchor="left", x=0,
+            orientation="v",
+            yanchor="top",  y=1.0,
+            xanchor="left", x=1.01,
             bgcolor="rgba(0,0,0,0)",
             borderwidth=0,
+            font=dict(size=11),
         ),
         hovermode="x unified",
     )
@@ -642,9 +672,10 @@ with tab2:
             "Showing probabilities from the damped-persistence model."
         )
 
+    clim = compute_enso_climatology(oni)
     col_prob, _ = st.columns([2, 1])
     with col_prob:
-        st.plotly_chart(make_prob_chart(enso_probs, fc), use_container_width=True)
+        st.plotly_chart(make_prob_chart(enso_probs, fc, clim), use_container_width=True)
 
     # Probability table
     show_table = st.toggle("Show probability table", value=False)
