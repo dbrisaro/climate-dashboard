@@ -927,7 +927,7 @@ with tab2:
             "derived from historical ENSO data.\n\n"
             "The **all-models average** (white line) is the consensus forecast. "
             "Spread between models gives a measure of forecast uncertainty.\n\n"
-            "Source: IRI/CPC — [ensoforecast.iri.columbia.edu](https://ensoforecast.iri.columbia.edu)"
+            "Source: IRI/CPC - [ensoforecast.iri.columbia.edu](https://ensoforecast.iri.columbia.edu)"
         )
 
     st.divider()
@@ -982,34 +982,34 @@ with tab3:
         "**CPC NMME** tercile probability maps and **ECMWF SEAS5** ensemble-mean anomaly maps."
     )
 
-    st.markdown("### 🟤🟢 CPC NMME — Tercile probability maps")
+    st.markdown("### CPC NMME - Tercile probability maps")
     st.markdown(
         "Each map shows which tercile category is most likely for a **3-month overlapping season** "
         "(e.g. MJJ = May+Jun+Jul average), initialized from the same month. "
         "Colors show the dominant category: "
-        "**🟤 below-normal · ⬜ equal chances (no category ≥ 40%) · 🟢 above-normal.**"
+        "**brown = below-normal · white = equal chances (no category >= 40%) · green = above-normal.**"
     )
 
     with st.expander("What is lead time?"):
         st.markdown("""
 **Lead time** is how far in advance a forecast is issued relative to the period it is predicting.
 
-**Example** — if the forecast is initialized in **April 2026**:
+**Example** - if the forecast is initialized in **April 2026**:
 
 | Season | Months covered | Lead time | Interpretation |
 |--------|---------------|-----------|----------------|
-| MJJ | May + Jun + Jul | 1–3 months | Short lead — most reliable |
-| JJA | Jun + Jul + Aug | 2–4 months | Medium lead |
-| JAS | Jul + Aug + Sep | 3–5 months | Medium-long lead |
-| ASO | Aug + Sep + Oct | 4–6 months | Long lead — less reliable |
+| MJJ | May + Jun + Jul | 1-3 months | Short lead - most reliable |
+| JJA | Jun + Jul + Aug | 2-4 months | Medium lead |
+| JAS | Jul + Aug + Sep | 3-5 months | Medium-long lead |
+| ASO | Aug + Sep + Oct | 4-6 months | Long lead - less reliable |
 
 **Why does lead time matter?**
 The atmosphere loses memory of its initial state over time, so forecast skill generally decreases with longer lead times.
-At short leads (1–2 months), the model still "remembers" current ocean and land conditions.
-At long leads (4–6 months), the signal comes almost entirely from slowly-evolving boundary forcings
-like sea surface temperatures (ENSO, for example) — everything else tends to average out.
+At short leads (1-2 months), the model still "remembers" current ocean and land conditions.
+At long leads (4-6 months), the signal comes almost entirely from slowly-evolving boundary forcings
+like sea surface temperatures (ENSO, for example) - everything else tends to average out.
 
-On the maps: **longer lead → more white area** (fewer grid points where any category exceeds the 40% threshold),
+On the maps: **longer lead = more white area** (fewer grid points where any category exceeds the 40% threshold),
 because the ensemble models spread out and agree less on which tercile will be most likely.
         """)
 
@@ -1049,14 +1049,14 @@ because the ensemble models spread out and agree less on which tercile will be m
         st.caption(init_label)
 
         st.info(
-            "**ℹ️ Why does the temperature map look almost entirely green (above-normal)?**  \n"
-            "The NMME terciles are computed relative to the **1991–2020 historical climatology**. "
+            "**Why does the temperature map look almost entirely green (above-normal)?**  \n"
+            "The NMME terciles are computed relative to the **1991-2020 historical climatology**. "
             "Since 2026 temperatures are consistently higher than that baseline due to long-term warming, "
-            "virtually all models forecast above-normal temperatures across most of South America — "
+            "virtually all models forecast above-normal temperatures across most of South America "
             "even at long lead times. This is a **real physical signal** (the global warming trend), "
             "not a bug in the data. It means the interannual variability signal (e.g., from ENSO) "
             "is largely masked by the systematic warm bias of the models relative to the reference period. "
-            "The SEAS5 anomaly maps below provide a complementary view in °C."
+            "The SEAS5 anomaly maps below provide a complementary view in degrees C."
         )
 
         col_t, col_p = st.columns(2)
@@ -1066,7 +1066,7 @@ because the ensemble models spread out and agree less on which tercile will be m
             if "tmp2m" in nmme:
                 sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
                 st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Temperature — {seas_str}"),
+                    make_nmme_prob_map(sub, f"Temperature - {seas_str}"),
                     use_container_width=True,
                 )
             else:
@@ -1076,7 +1076,7 @@ because the ensemble models spread out and agree less on which tercile will be m
             if "prate" in nmme:
                 sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
                 st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Precipitation — {seas_str}"),
+                    make_nmme_prob_map(sub, f"Precipitation - {seas_str}"),
                     use_container_width=True,
                 )
             else:
@@ -1090,7 +1090,7 @@ because the ensemble models spread out and agree less on which tercile will be m
 
     # ── SEAS5 anomaly maps ────────────────────────────────────────────────────
     st.divider()
-    st.markdown("### 🌡️💧 ECMWF SEAS5 — Ensemble-mean anomaly maps")
+    st.markdown("### ECMWF SEAS5 - Ensemble-mean anomaly maps")
     st.markdown(
         "Temperature anomaly (°C vs 1993–2016 climatology) and precipitation (mm/day) "
         "from the **ECMWF SEAS5** ensemble mean, downloaded from the Copernicus Climate "
@@ -1144,7 +1144,7 @@ because the ensemble models spread out and agree less on which tercile will be m
                     st.plotly_chart(
                         make_seas5_geo_map(
                             sub,
-                            title=f"SEAS5 Temperature anomaly — {seas_str_s5}",
+                            title=f"SEAS5 Temperature anomaly - {seas_str_s5}",
                             colorscale="RdBu_r",
                             cbar_title="T2m anomaly (°C)",
                             diverging=True,
@@ -1163,7 +1163,7 @@ because the ensemble models spread out and agree less on which tercile will be m
                     st.plotly_chart(
                         make_seas5_geo_map(
                             sub,
-                            title=f"SEAS5 Precipitation — {seas_str_s5}",
+                            title=f"SEAS5 Precipitation - {seas_str_s5}",
                             colorscale="YlGnBu",
                             cbar_title="Precipitation (mm/day)",
                             diverging=False,
@@ -1177,7 +1177,7 @@ because the ensemble models spread out and agree less on which tercile will be m
 
         st.caption(
             "Source: ECMWF SEAS5 via Copernicus Climate Data Store (C3S)  |  "
-            "T2m anomaly reference: 1993–2016 (SEAS5 hindcast period)  |  "
+            "T2m anomaly reference: 1993-2016 (SEAS5 hindcast period)  |  "
             "Precipitation: absolute ensemble mean (mm/day)"
         )
     else:
