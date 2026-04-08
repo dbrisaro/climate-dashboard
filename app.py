@@ -535,7 +535,7 @@ def load_seas5_sa_maps():
     Returns dict with 't2m' and/or 'prcp' DataFrames, or None.
     """
     result = {}
-    for key, fname in [("t2m", "seas5_t2m_anom_SA"), ("prcp", "seas5_prcp_anom_SA")]:
+    for key, fname in [("t2m", "seas5_t2m_anom_SA"), ("prcp", "seas5_prcp_mmday_SA")]:
         try:
             df = pd.read_csv(f"{BASE_URL}/forecasts/{fname}.csv")
             if len(df) > 10 and "anom" in df.columns:
@@ -545,15 +545,22 @@ def load_seas5_sa_maps():
     return result if result else None
 
 
-def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None):
+def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging=True):
     """
-    Interactive Plotly geo scatter map of a SEAS5 anomaly field over South America.
+    Interactive Plotly geo scatter map of a SEAS5 field over South America.
     Uses Scattergeo with country borders — fully interactive, no pixels.
+    diverging=True  → symmetric ±vrange (anomaly maps)
+    diverging=False → 0..vrange range (absolute maps like precipitation)
     """
     vals = df["anom"]
-    if vrange is None:
-        vrange = max(abs(vals.quantile(0.02)), abs(vals.quantile(0.98)), 0.3)
-    vrange = round(vrange, 2)
+    if diverging:
+        if vrange is None:
+            vrange = max(abs(vals.quantile(0.02)), abs(vals.quantile(0.98)), 0.3)
+        vrange = round(float(vrange), 3)
+        cmin, cmax = -vrange, vrange
+    else:
+        cmin = max(0.0, float(vals.quantile(0.02)))
+        cmax = float(vals.quantile(0.98))
 
     fig = go.Figure()
     fig.add_trace(go.Scattergeo(
@@ -563,8 +570,8 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None):
         marker=dict(
             color=vals,
             colorscale=colorscale,
-            cmin=-vrange,
-            cmax= vrange,
+            cmin=cmin,
+            cmax=cmax,
             size=9,
             opacity=0.9,
             colorbar=dict(
@@ -821,9 +828,10 @@ with tab3:
                 st.plotly_chart(
                     make_seas5_geo_map(
                         seas5_maps["prcp"],
-                        title="Precipitation Anomaly Rate (mm/day)",
-                        colorscale="RdYlGn",
-                        cbar_title="Anomaly (mm/day)",
+                        title="Precipitation Forecast (mm/day)",
+                        colorscale="Blues",
+                        cbar_title="mm/day",
+                        diverging=False,
                     ),
                     use_container_width=True,
                 )

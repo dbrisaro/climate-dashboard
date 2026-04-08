@@ -208,7 +208,7 @@ def _extract_sa_grid(nc_path, init_year, init_month):
         .reset_index()
         .rename(columns={lat_dim: "lat", lon_dim: "lon"})
     )
-    df["anom"] = df["anom"].round(4)
+    # Do NOT round here — callers may need to apply unit conversions first
 
     # Normalise longitude to -180/180
     if df["lon"].max() > 180:
@@ -222,57 +222,93 @@ def _extract_sa_grid(nc_path, init_year, init_month):
 
 def fetch_seas5_sa_maps():
     """
-    Download SEAS5 ensemble-mean 2m temperature anomaly and
-    total precipitation anomaly rate for South America (leads 1-3).
+    Download SEAS5 ensemble-mean seasonal forecasts for South America (leads 1-3).
+
+    T2m  : from seasonal-postprocessed-single-levels (pre-computed anomaly, °C)
+    Precip: from seasonal-monthly-single-levels (raw tprate kg/m²/s → mm/day)
+
     Saves:
-      data/forecasts/seas5_t2m_anom_SA.csv
-      data/forecasts/seas5_prcp_anom_SA.csv
+      data/forecasts/seas5_t2m_anom_SA.csv   — T2m anomaly (°C)
+      data/forecasts/seas5_prcp_mmday_SA.csv — absolute precipitation (mm/day)
     """
     now   = datetime.utcnow()
     year  = str(now.year)
     month = f"{now.month:02d}"
 
-    VARS = [
-        ("t2m",  "2m_temperature_anomaly",          "seas5_t2m_anom_SA"),
-        ("prcp", "total_precipitation_anomaly_rate", "seas5_prcp_anom_SA"),
-    ]
-
     c = get_cds_client()
 
-    for tag, cds_var, out_stem in VARS:
-        nc_path = DATA_DIR / f"seas5_{tag}_SA_{year}{month}.nc"
-        out_csv = DATA_DIR / f"{out_stem}.csv"
+    # ── 1. T2m anomaly (post-processed) ─────────────────────────────────────
+    nc_t2m  = DATA_DIR / f"seas5_t2m_SA_{year}{month}.nc"
+    csv_t2m = DATA_DIR / "seas5_t2m_anom_SA.csv"
 
-        if not nc_path.exists():
-            print(f"Downloading SEAS5 {cds_var} {year}-{month} …")
-            try:
-                c.retrieve(
-                    "seasonal-postprocessed-single-levels",
-                    {
-                        "originating_centre": "ecmwf",
-                        "system":             "51",
-                        "variable":           cds_var,
-                        "product_type":       "ensemble_mean",
-                        "year":               year,
-                        "month":              month,
-                        "leadtime_month":     ["1", "2", "3"],
-                        "format":             "netcdf",
-                    },
-                    str(nc_path),
-                )
-                print(f"Downloaded -> {nc_path}  ({nc_path.stat().st_size/1024:.0f} kB)")
-            except Exception as e:
-                print(f"ERROR downloading {cds_var}: {e}")
-                continue
-        else:
-            print(f"Using cached {nc_path}")
-
+    if not nc_t2m.exists():
+        print(f"Downloading SEAS5 2m_temperature_anomaly {year}-{month} …")
         try:
-            df = _extract_sa_grid(nc_path, int(year), int(month))
-            df.to_csv(out_csv, index=False)
-            print(f"Saved {out_stem}: {len(df)} grid points -> {out_csv}")
+            c.retrieve(
+                "seasonal-postprocessed-single-levels",
+                {
+                    "originating_centre": "ecmwf",
+                    "system":             "51",
+                    "variable":           "2m_temperature_anomaly",
+                    "product_type":       "ensemble_mean",
+                    "year":               year,
+                    "month":              month,
+                    "leadtime_month":     ["1", "2", "3"],
+                    "format":             "netcdf",
+                },
+                str(nc_t2m),
+            )
+            print(f"Downloaded -> {nc_t2m}  ({nc_t2m.stat().st_size/1024:.0f} kB)")
         except Exception as e:
-            print(f"ERROR processing {nc_path}: {e}")
+            print(f"ERROR downloading T2m anomaly: {e}")
+    else:
+        print(f"Using cached {nc_t2m}")
+
+    if nc_t2m.exists():
+        try:
+            df = _extract_sa_grid(nc_t2m, int(year), int(month))
+            df["anom"] = df["anom"].round(4)
+            df.to_csv(csv_t2m, index=False)
+            print(f"T2m anomaly saved: {len(df)} grid points -> {csv_t2m}")
+        except Exception as e:
+            print(f"ERROR processing T2m: {e}")
+
+    # ── 2. Precipitation (raw monthly, convert to mm/day) ────────────────────
+    nc_prcp  = DATA_DIR / f"seas5_prcp_SA_{year}{month}.nc"
+    csv_prcp = DATA_DIR / "seas5_prcp_mmday_SA.csv"
+
+    if not nc_prcp.exists():
+        print(f"Downloading SEAS5 total_precipitation {year}-{month} …")
+        try:
+            c.retrieve(
+                "seasonal-monthly-single-levels",
+                {
+                    "originating_centre": "ecmwf",
+                    "system":             "51",
+                    "variable":           "total_precipitation",
+                    "product_type":       "ensemble_mean",
+                    "year":               year,
+                    "month":              month,
+                    "leadtime_month":     ["1", "2", "3"],
+                    "format":             "netcdf",
+                },
+                str(nc_prcp),
+            )
+            print(f"Downloaded -> {nc_prcp}  ({nc_prcp.stat().st_size/1024:.0f} kB)")
+        except Exception as e:
+            print(f"ERROR downloading precipitation: {e}")
+    else:
+        print(f"Using cached {nc_prcp}")
+
+    if nc_prcp.exists():
+        try:
+            df = _extract_sa_grid(nc_prcp, int(year), int(month))
+            # tprate is in m/s; convert to mm/day: × 86400 (s→day) × 1000 (m→mm)
+            df["anom"] = (df["anom"] * 86_400_000).round(2)
+            df.to_csv(csv_prcp, index=False)
+            print(f"Precipitation saved: {len(df)} grid points -> {csv_prcp}")
+        except Exception as e:
+            print(f"ERROR processing precipitation: {e}")
 
 
 if __name__ == "__main__":
