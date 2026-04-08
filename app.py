@@ -326,14 +326,19 @@ def make_prob_chart(enso_probs=None, fc=None):
         barmode="group",
         bargap=0.20,
         bargroupgap=0.05,
-        title=dict(text=f"{title}<br><sup>{subtitle}</sup>"),
         yaxis_title="Percent chance (%)",
         yaxis=dict(range=[0, 100], dtick=10, gridcolor="rgba(255,255,255,0.08)"),
         xaxis_title="Season",
-        height=400,
+        height=380,
         template="plotly_dark",
-        margin=dict(l=10, r=10, t=60, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.08, x=0),
+        margin=dict(l=10, r=10, t=10, b=10),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=0.99,
+            xanchor="left", x=0.01,
+            bgcolor="rgba(0,0,0,0.4)",
+            borderwidth=0,
+        ),
         hovermode="x unified",
     )
     return fig
@@ -461,11 +466,14 @@ with tab2:
     if enso_probs is not None:
         issued = enso_probs["issued"].iloc[0] if "issued" in enso_probs.columns else ""
         source = enso_probs["source"].iloc[0] if "source" in enso_probs.columns else "IRI/CPC"
-        st.caption(f"Official {source} seasonal probability forecast  |  Issued: {issued}  |  Updated daily.")
+        st.caption(
+            f"Source: {source} (International Research Institute for Climate and Society / NOAA CPC)  "
+            f"|  Issued: {issued}  |  Updated daily."
+        )
     else:
         st.caption(
-            "Official IRI/CPC probability data not yet available (runs with daily GitHub Actions). "
-            "Showing probabilities from the damped-persistence model in the meantime."
+            "IRI/CPC official data not yet available. "
+            "Showing probabilities from the damped-persistence model."
         )
 
     st.plotly_chart(make_prob_chart(enso_probs, fc), use_container_width=True)
