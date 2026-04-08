@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 import requests
 from bs4 import BeautifulSoup
 
@@ -548,7 +549,7 @@ def load_seas5_sa_maps():
 def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging=True):
     """
     Interactive Plotly geo scatter map of a SEAS5 field over South America.
-    Uses Scattergeo with country borders — fully interactive, no pixels.
+    Uses px.scatter_geo — fully interactive, no pixels.
     diverging=True  → symmetric ±vrange (anomaly maps)
     diverging=False → 0..vrange range (absolute maps like precipitation)
     """
@@ -562,47 +563,30 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
         cmin = max(0.0, float(vals.quantile(0.02)))
         cmax = float(vals.quantile(0.98))
 
-    fig = go.Figure()
-    fig.add_trace(go.Scattergeo(
-        lat=df["lat"],
-        lon=df["lon"],
-        mode="markers",
-        marker=dict(
-            color=vals,
-            colorscale=colorscale,
-            cmin=cmin,
-            cmax=cmax,
-            size=9,
-            opacity=0.9,
-            colorbar=dict(
-                title=dict(text=cbar_title, side="right"),
-                thickness=14,
-                len=0.75,
-                outlinewidth=0,
-            ),
-        ),
-        hovertemplate=(
-            "Lat: %{lat:.1f}°, Lon: %{lon:.1f}°<br>"
-            + cbar_title + ": <b>%{marker.color:.2f}</b><extra></extra>"
-        ),
-    ))
-    fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
+    fig = px.scatter_geo(
+        df,
+        lat="lat",
+        lon="lon",
+        color="anom",
+        color_continuous_scale=colorscale,
+        range_color=[cmin, cmax],
         template="plotly_dark",
+        title=title,
+        labels={"anom": cbar_title},
+        hover_data={"lat": ":.1f", "lon": ":.1f", "anom": ":.2f"},
+    )
+    fig.update_traces(marker=dict(size=8, opacity=0.9))
+    fig.update_layout(
         height=580,
         margin=dict(l=0, r=0, t=40, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
+        coloraxis_colorbar=dict(title=cbar_title, thickness=14, len=0.75),
         geo=dict(
-            scope="south america",
             showcoastlines=True,
-            coastlinecolor="rgba(220,220,220,0.7)",
             showborders=True,
-            bordercolor="rgba(200,200,200,0.5)",
             showland=True,
-            landcolor="rgba(35,35,35,0.6)",
             showocean=True,
-            oceancolor="rgba(15,20,40,0.7)",
-            showlakes=False,
+            lonaxis=dict(range=[-92, -28]),
+            lataxis=dict(range=[-58, 16]),
         ),
     )
     return fig
