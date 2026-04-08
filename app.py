@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,6 +48,136 @@ def load_seas5_mean():
         return df if len(df) > 0 else None
     except Exception:
         return None
+
+@st.cache_data(ttl=3600)
+def load_iri_plume():
+    """
+    Fetch IRI multi-model ENSO plume data from the public JSON API.
+    URL: https://ensoforecast.iri.columbia.edu/plumes_json/{year}/{month_0idx}
+    IRI publishes around the 19th of each month; month is 0-indexed (Jan=0).
+    Returns dict with keys: models, observed, averages, seasons, init_label
+    or None on failure.
+    """
+    now = datetime.utcnow()
+    # IRI publishes ~19th of the month; if before the 20th use previous month
+    if now.day < 20:
+        init = (now.replace(day=1) - pd.DateOffset(months=1))
+    else:
+        init = now.replace(day=1)
+
+    year     = init.year
+    month_0  = init.month - 1   # 0-indexed: Jan=0, Feb=1, ..., Dec=11
+
+    url = f"https://ensoforecast.iri.columbia.edu/plumes_json/{year}/{month_0}"
+    try:
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        return None
+
+    # Build season labels starting from init month+1
+    season_names = ["DJF","JFM","FMA","MAM","AMJ","MJJ","JJA","JAS","ASO","SON","OND","NDJ"]
+    seasons = []
+    for k in range(9):
+        idx = (init.month + k) % 12   # center month of 3-month season
+        seasons.append(season_names[idx])
+
+    data["seasons"]    = seasons
+    data["init_label"] = init.strftime("%B %Y")
+    return data
+
+
+def make_iri_plume_chart(data, oni_df):
+    """
+    Interactive multi-model ENSO plume chart reproducing the IRI SST table.
+    Individual model lines + dynamical/statistical/all-model averages + observed.
+    """
+    seasons  = data.get("seasons", [])
+    x_labels = seasons
+
+    fig = go.Figure()
+
+    # ── Individual model lines ────────────────────────────────────────────────
+    dyn_color  = "rgba(230,100,50,0.35)"
+    stat_color = "rgba(80,140,220,0.35)"
+
+    models_added = {"Dynamical": False, "Statistical": False}
+    for m in data.get("models", []):
+        raw   = m.get("data", [])
+        yvals = [v if v != -999 else None for v in raw]
+        xvals = x_labels[:len(yvals)]
+        mtype = m.get("type", "Dynamical")
+        color = dyn_color if mtype == "Dynamical" else stat_color
+        show  = not models_added[mtype]
+        models_added[mtype] = True
+        fig.add_trace(go.Scatter(
+            x=xvals, y=yvals,
+            mode="lines",
+            name=mtype,
+            legendgroup=mtype,
+            showlegend=show,
+            line=dict(color=color, width=1),
+            hovertemplate=f"{m['model']}: %{{y:.2f}} C<extra></extra>",
+        ))
+
+    # ── Averages ─────────────────────────────────────────────────────────────
+    avgs = data.get("averages", {})
+    avg_specs = [
+        ("dynamical",   "Dynamical avg",   "rgb(230,100,50)",  2.5),
+        ("statistical", "Statistical avg", "rgb(80,140,220)",  2.5),
+        ("total",       "All models avg",  "rgb(255,255,255)", 3.0),
+    ]
+    for key, label, color, width in avg_specs:
+        raw   = avgs.get(key, [])
+        yvals = [v if v not in (-999, None) else None for v in raw]
+        xvals = x_labels[:len(yvals)]
+        if not yvals:
+            continue
+        fig.add_trace(go.Scatter(
+            x=xvals, y=yvals,
+            mode="lines+markers",
+            name=label,
+            line=dict(color=color, width=width),
+            marker=dict(size=6),
+            hovertemplate=f"{label}: %{{y:.2f}} C<extra></extra>",
+        ))
+
+    # ── Observed Nino3.4 (last ~6 months as context) ─────────────────────────
+    obs = oni_df.sort_values("date").tail(8)
+    obs_x = [d.strftime("%b") for d in obs["date"]]
+    fig.add_trace(go.Scatter(
+        x=obs_x, y=obs["oni"],
+        mode="lines+markers",
+        name="ONI observed",
+        line=dict(color="rgb(0,210,160)", width=2, dash="dot"),
+        marker=dict(size=7, symbol="circle"),
+        hovertemplate="Observed %{x}: %{y:+.2f} C<extra></extra>",
+    ))
+
+    # ── Threshold lines ───────────────────────────────────────────────────────
+    fig.add_hline(y= 0.5, line_color="rgba(220,50,50,0.5)",  line_dash="dot", line_width=1)
+    fig.add_hline(y=-0.5, line_color="rgba(50,100,220,0.5)", line_dash="dot", line_width=1)
+    fig.add_hline(y= 0,   line_color="white", line_width=0.5, opacity=0.15)
+
+    fig.update_layout(
+        height=480,
+        template="plotly_dark",
+        yaxis_title="Nino 3.4 anomaly (C)",
+        xaxis_title="Season",
+        margin=dict(l=10, r=10, t=10, b=10),
+        hovermode="x unified",
+        legend=dict(
+            orientation="v",
+            yanchor="top", y=1.0,
+            xanchor="left", x=1.01,
+            bgcolor="rgba(0,0,0,0)",
+            borderwidth=0,
+            font=dict(size=11),
+        ),
+    )
+    return fig
+
 
 @st.cache_data(ttl=3600)
 def get_iri_figures():
@@ -440,21 +571,37 @@ with tab2:
         "in ENSO forecasting."
     )
 
-    # ── Interactive forecast plume ────────────────────────────────────────────
-    st.markdown("### Forecast plume")
+    # ── IRI multi-model plume ─────────────────────────────────────────────────
+    st.markdown("### Multi-model forecast plume")
 
-    fc    = compute_damped_persistence(n_leads=7)
-    seas5 = load_seas5_mean()
-    st.plotly_chart(make_plume_chart(fc, seas5), use_container_width=True)
+    iri_plume = load_iri_plume()
+    fc        = compute_damped_persistence(n_leads=7)
+    seas5     = load_seas5_mean()
 
-    with st.expander("About the forecast method"):
+    if iri_plume is not None:
+        n_models = len(iri_plume.get("models", []))
+        st.caption(
+            f"Source: IRI multi-model ensemble  |  Init: {iri_plume['init_label']}  "
+            f"|  {n_models} models (dynamical + statistical)  |  "
+            "API: ensoforecast.iri.columbia.edu"
+        )
+        st.plotly_chart(make_iri_plume_chart(iri_plume, oni), use_container_width=True)
+    else:
+        st.caption(
+            "IRI API not available. Showing damped-persistence benchmark forecast."
+        )
+        st.plotly_chart(make_plume_chart(fc, seas5), use_container_width=True)
+
+    with st.expander("About the forecast models"):
         st.markdown(
-            "**Damped persistence** uses the current ONI value as a starting point "
-            "and applies an exponential decay towards the climatological mean. "
-            "The decay rate r = 0.85/month and a background spread of "
-            "sigma = 1.0 C are consistent with published ENSO prediction skill. "
-            "The shaded envelopes show 50% and 90% uncertainty ranges assuming "
-            "a Gaussian error distribution."
+            "**Dynamical models** (orange lines) use coupled ocean-atmosphere GCMs "
+            "to simulate the evolution of tropical Pacific SSTs. "
+            "Models include ECMWF SEAS5, NCEP CFSv2, NASA GMAO, UKMO, and others.\n\n"
+            "**Statistical models** (blue lines) use empirical relationships "
+            "derived from historical ENSO data.\n\n"
+            "The **all-models average** (white line) is the consensus forecast. "
+            "Spread between models gives a measure of forecast uncertainty.\n\n"
+            "Source: IRI/CPC — [ensoforecast.iri.columbia.edu](https://ensoforecast.iri.columbia.edu)"
         )
 
     st.divider()
