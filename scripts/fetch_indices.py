@@ -243,7 +243,13 @@ def fetch_soi():
     resp.raise_for_status()
 
     rows = []
+    section = 0  # file has two sections; we only want the first (ANOMALY)
     for line in resp.text.strip().splitlines():
+        if "YEAR" in line and "JAN" in line:
+            section += 1
+            if section > 1:
+                break   # stop before second section
+            continue
         parts = line.split()
         if len(parts) < 13:
             continue
