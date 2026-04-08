@@ -985,6 +985,30 @@ with tab3:
         "🟤 below-normal · ⬜ equal chances (no category ≥ 40%) · 🟢 above-normal."
     )
 
+    with st.expander("What is lead time?"):
+        st.markdown("""
+**Lead time** is how far in advance a forecast is issued relative to the period it is predicting.
+
+**Example** — if the forecast is initialized in **April 2026**:
+
+| Season | Months covered | Lead time | Interpretation |
+|--------|---------------|-----------|----------------|
+| MJJ | May + Jun + Jul | 1–3 months | Short lead — most reliable |
+| JJA | Jun + Jul + Aug | 2–4 months | Medium lead |
+| JAS | Jul + Aug + Sep | 3–5 months | Medium-long lead |
+| ASO | Aug + Sep + Oct | 4–6 months | Long lead — less reliable |
+
+**Why does lead time matter?**
+The atmosphere loses memory of its initial state over time, so forecast skill generally decreases with longer lead times.
+At short leads (1–2 months), the model still "remembers" current ocean and land conditions.
+At long leads (4–6 months), the signal comes almost entirely from slowly-evolving boundary forcings
+like sea surface temperatures (ENSO, for example) — everything else tends to average out.
+
+On the maps: **longer lead → more white area** (fewer grid points where any category exceeds the 40% threshold),
+because the ensemble models spread out and agree less on which tercile will be most likely.
+        """)
+
+
     nmme = load_nmme_probs()
 
     if nmme:
