@@ -99,23 +99,32 @@ def make_iri_plume_chart(data, oni_df):
     fig = go.Figure()
 
     # ── Individual model lines ────────────────────────────────────────────────
-    dyn_color  = "rgba(230,100,50,0.35)"
-    stat_color = "rgba(80,140,220,0.35)"
+    type_colors = {
+        "Dynamical":   "rgba(230,100,50,0.35)",
+        "Statistical": "rgba(80,140,220,0.35)",
+        "Other":       "rgba(180,180,80,0.35)",
+    }
 
-    models_added = {"Dynamical": False, "Statistical": False}
+    models_added = {}
     for m in data.get("models", []):
         raw   = m.get("data", [])
-        yvals = [v if v != -999 else None for v in raw]
+        yvals = [v if v not in (-999, -999.0) else None for v in raw]
         xvals = x_labels[:len(yvals)]
-        mtype = m.get("type", "Dynamical")
-        color = dyn_color if mtype == "Dynamical" else stat_color
-        show  = not models_added[mtype]
-        models_added[mtype] = True
+        raw_type = (m.get("type") or "Dynamical").strip()
+        if "stat" in raw_type.lower():
+            mtype_norm = "Statistical"
+        elif raw_type == "Other":
+            mtype_norm = "Other"
+        else:
+            mtype_norm = "Dynamical"
+        color = type_colors[mtype_norm]
+        show  = mtype_norm not in models_added
+        models_added[mtype_norm] = True
         fig.add_trace(go.Scatter(
             x=xvals, y=yvals,
             mode="lines",
-            name=mtype,
-            legendgroup=mtype,
+            name=mtype_norm,
+            legendgroup=mtype_norm,
             showlegend=show,
             line=dict(color=color, width=1),
             hovertemplate=f"{m['model']}: %{{y:.2f}} C<extra></extra>",
