@@ -526,17 +526,35 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
     return fig
 
 
-# IRI-style colorscale: brown (below-normal) → white (equal chances) → green (above-normal)
-# Non-significant areas (NaN) inherit plot_bgcolor = white
-_TERCILE_COLORSCALE = [
-    [0.00, "#6B2700"],  # dark brown   — below-normal ~80 %
-    [0.25, "#CC7722"],  # medium brown — below-normal ~55 %
-    [0.40, "#F0C080"],  # light brown  — below-normal ~40 %
-    [0.50, "#FFFFFF"],  # white center (NaN areas shown via plot_bgcolor)
-    [0.60, "#B8E0A0"],  # light green  — above-normal ~40 %
-    [0.75, "#4CAF50"],  # medium green — above-normal ~55 %
-    [1.00, "#1A5C1A"],  # dark green   — above-normal ~80 %
+# ── Discrete IRI-style colorscale ────────────────────────────────────────────
+# 18 bins × 0.10 step from -0.90 to +0.90.
+# NaN areas show as white (plot_bgcolor) — not part of the colorscale.
+# Brown shades = below-normal, white = NaN gap, green shades = above-normal.
+_BIN_COLORS = [
+    "#6B2700",  # -0.90…-0.80  ≥ 80 % below-normal
+    "#8B3A0F",  # -0.80…-0.70  ≥ 70 %
+    "#CC7722",  # -0.70…-0.60  ≥ 60 %
+    "#E8A850",  # -0.60…-0.50  ≥ 50 %
+    "#F5CC90",  # -0.50…-0.40  ≥ 40 %
+    "#FFFFFF",  # NaN gap
+    "#FFFFFF",
+    "#FFFFFF",
+    "#FFFFFF",
+    "#FFFFFF",
+    "#FFFFFF",
+    "#FFFFFF",
+    "#FFFFFF",  # NaN gap
+    "#C8EAB0",  # +0.40…+0.50  ≥ 40 % above-normal
+    "#7BC87A",  # +0.50…+0.60  ≥ 50 %
+    "#3D9E3D",  # +0.60…+0.70  ≥ 60 %
+    "#1E6B1E",  # +0.70…+0.80  ≥ 70 %
+    "#0A3D0A",  # +0.80…+0.90  ≥ 80 %
 ]
+_N = len(_BIN_COLORS)  # 18
+_TERCILE_COLORSCALE = []
+for _i, _c in enumerate(_BIN_COLORS):
+    _TERCILE_COLORSCALE.append([_i / _N, _c])
+    _TERCILE_COLORSCALE.append([(_i + 1) / _N, _c])
 
 
 def make_nmme_prob_map(df, title):
@@ -570,21 +588,23 @@ def make_nmme_prob_map(df, title):
     fig.add_trace(go.Contour(
         x=lons, y=lats, z=z,
         colorscale=_TERCILE_COLORSCALE,
-        zmin=-0.80, zmax=0.80,
-        contours_coloring="heatmap",
-        ncontours=20,
-        line=dict(width=0),
+        zmin=-0.90, zmax=0.90,
+        contours=dict(start=-0.90, end=0.90, size=0.10),
+        contours_coloring="fill",   # discrete steps
+        line=dict(width=0.4, color="rgba(180,180,180,0.3)"),
         colorbar=dict(
-            tickvals=[-0.70, -0.50, -0.40, 0.40, 0.50, 0.70],
-            ticktext=["Below 70%", "Below 50%", "Below 40%",
-                      "Above 40%", "Above 50%", "Above 70%"],
-            thickness=14, len=0.80, outlinewidth=0,
+            tickvals=[-0.85, -0.75, -0.65, -0.55, -0.45,
+                       0.45,  0.55,  0.65,  0.75,  0.85],
+            ticktext=["≥80% below", "≥70%", "≥60%", "≥50%", "≥40%",
+                      "≥40% above", "≥50%", "≥60%", "≥70%", "≥80%"],
+            thickness=16, len=0.70, outlinewidth=0,
             title=dict(text="Probability", side="right"),
+            tickfont=dict(size=10),
         ),
         hovertemplate=(
             "Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
-            "Signal: <b>%{z:+.0%}</b>  "
-            "(+ = above-normal, − = below-normal)<extra></extra>"
+            "Prob: <b>%{z:.0%}</b>  "
+            "(+ above-normal · − below-normal)<extra></extra>"
         ),
         connectgaps=False,
     ))
