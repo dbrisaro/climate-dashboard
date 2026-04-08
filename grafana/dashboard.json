@@ -1,0 +1,388 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFINITY",
+      "label": "Infinity",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "yesoreyeram-infinity-datasource",
+      "pluginName": "Infinity"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "yesoreyeram-infinity-datasource",
+      "name": "Infinity",
+      "version": "1.0.0"
+    }
+  ],
+  "title": "Climate Indices — South America",
+  "uid": "climate-indices-sa",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1h",
+  "time": { "from": "1990-01-01T00:00:00Z", "to": "now" },
+  "timepicker": {},
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "text",
+      "title": "About this dashboard",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Climate Indices — South America\nLarge-scale climate oscillations shape rainfall, temperature, and extreme events across Latin America. This dashboard tracks the main indices updated daily from public sources (NOAA CPC / PSL). **ONI/Niño 3.4**: El Niño–Southern Oscillation — warm events (>+0.5 °C) bring drought to NE Brazil and floods in SE South America. **MEI**: multivariate ENSO index. **SAM**: Southern Annular Mode — positive phase strengthens the westerlies. **IOD**: Indian Ocean Dipole — influences Atlantic teleconnections."
+      },
+      "datasource": null
+    },
+
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "ONI (latest)",
+      "gridPos": { "x": 0, "y": 3, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue",  "value": null },
+              { "color": "blue",  "value": -2.0 },
+              { "color": "#6baed6","value": -0.5 },
+              { "color": "green", "value": 0.5 },
+              { "color": "orange","value": 1.0 },
+              { "color": "red",   "value": 1.5 }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/oni.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "oni",  "text": "oni",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Niño 3.4 (latest)",
+      "gridPos": { "x": 4, "y": 3, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue",   "value": null },
+              { "color": "blue",   "value": -2.0 },
+              { "color": "#6baed6","value": -0.5 },
+              { "color": "green",  "value": 0.5 },
+              { "color": "orange", "value": 1.0 },
+              { "color": "red",    "value": 1.5 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/nino34.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date",   "text": "date",   "type": "timestamp" },
+            { "selector": "nino34", "text": "nino34", "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "MEI (latest)",
+      "gridPos": { "x": 8, "y": 3, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue",   "value": null },
+              { "color": "blue",   "value": -1.0 },
+              { "color": "green",  "value": 0.5 },
+              { "color": "orange", "value": 1.0 },
+              { "color": "red",    "value": 2.0 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/mei.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "mei",  "text": "mei",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "SAM (latest)",
+      "gridPos": { "x": 12, "y": 3, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "red",    "value": -2.0 },
+              { "color": "orange", "value": -1.0 },
+              { "color": "green",  "value": 0.0 },
+              { "color": "#6baed6","value": 1.0 },
+              { "color": "blue",   "value": 2.0 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/sam.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "sam",  "text": "sam",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "IOD (latest)",
+      "gridPos": { "x": 16, "y": 3, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue",   "value": null },
+              { "color": "blue",   "value": -0.4 },
+              { "color": "green",  "value": 0.4 },
+              { "color": "orange", "value": 0.8 },
+              { "color": "red",    "value": 1.2 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/iod.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "iod",  "text": "iod",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "ONI — Oceanic Niño Index",
+      "gridPos": { "x": 0, "y": 7, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": { "mode": "absolute", "steps": [] }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/oni.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "oni",  "text": "ONI",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Niño 3.4 SST Anomaly",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/nino34.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date",   "text": "date",     "type": "timestamp" },
+            { "selector": "nino34", "text": "Niño 3.4", "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "MEI — Multivariate ENSO Index",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/mei.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "mei",  "text": "MEI",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "SAM — Southern Annular Mode",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/sam.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "sam",  "text": "SAM",  "type": "number" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "IOD — Indian Ocean Dipole",
+      "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "°C",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data/iod.csv",
+          "parser": "backend",
+          "columns": [
+            { "selector": "date", "text": "date", "type": "timestamp" },
+            { "selector": "iod",  "text": "IOD",  "type": "number" }
+          ]
+        }
+      ]
+    }
+
+  ]
+}

@@ -46,7 +46,15 @@ def fetch_oni():
         except ValueError:
             pass
 
+    # Map each 3-month season to the middle month for time-series plotting
+    season_to_month = {
+        "DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4,
+        "AMJ": 5, "MJJ": 6, "JJA": 7, "JAS": 8,
+        "ASO": 9, "SON": 10, "OND": 11, "NDJ": 12,
+    }
     df = pd.DataFrame(rows)
+    df["month"] = df["season"].map(season_to_month)
+    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
     out = DATA_DIR / "oni.csv"
     df.to_csv(out, index=False)
     print(f"ONI saved: {len(df)} rows -> {out}")
@@ -86,7 +94,15 @@ def fetch_mei():
                 except ValueError:
                     pass
 
+    # Map each bimonthly season to its first month for time-series plotting
+    bimonth_to_month = {
+        "DJFM": 1, "JFMA": 2, "FMAM": 3, "MAMJ": 4,
+        "AMJJ": 5, "MJJA": 6, "JJAS": 7, "JASO": 8,
+        "ASON": 9, "SOND": 10, "ONDS": 11, "NDJF": 12,
+    }
     df = pd.DataFrame(rows)
+    df["month"] = df["bimonth"].map(bimonth_to_month)
+    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
     out = DATA_DIR / "mei.csv"
     df.to_csv(out, index=False)
     print(f"MEI saved: {len(df)} rows -> {out}")
