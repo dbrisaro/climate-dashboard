@@ -539,8 +539,23 @@ def load_seas5_sa_maps():
     for key, fname in [("t2m", "seas5_t2m_anom_SA"), ("prcp", "seas5_prcp_mmday_SA")]:
         try:
             df = pd.read_csv(f"{BASE_URL}/forecasts/{fname}.csv")
-            if len(df) > 10 and "anom" in df.columns:
-                result[key] = df
+            if len(df) < 10 or "anom" not in df.columns:
+                continue
+            # Reconstruct forecast_date if missing (old CSV format)
+            if "forecast_date" not in df.columns:
+                if "lead_month" not in df.columns:
+                    df["lead_month"] = 1
+                if "init_year" in df.columns and "init_month" in df.columns:
+                    df["forecast_date"] = df.apply(
+                        lambda r: (pd.Timestamp(year=int(r["init_year"]),
+                                                month=int(r["init_month"]), day=1)
+                                   + pd.DateOffset(months=int(r["lead_month"]))
+                                   ).strftime("%Y-%m"),
+                        axis=1,
+                    )
+                else:
+                    df["forecast_date"] = "unknown"
+            result[key] = df
         except Exception:
             pass
     return result if result else None
