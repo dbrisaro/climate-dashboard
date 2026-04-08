@@ -25,6 +25,7 @@ def load_all():
     nino34 = pd.read_csv(f"{BASE_URL}/nino34.csv", parse_dates=["date"])
     nino12 = pd.read_csv(f"{BASE_URL}/nino12.csv", parse_dates=["date"])
     soi    = pd.read_csv(f"{BASE_URL}/soi.csv",    parse_dates=["date"])
+    soi    = soi.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
     return oni, mei, sam, iod, nino34, nino12, soi
 
 @st.cache_data(ttl=3600)
