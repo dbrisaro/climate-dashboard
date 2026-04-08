@@ -90,99 +90,109 @@ def load_iri_plume():
 
 def make_iri_plume_chart(data, oni_df):
     """
-    Interactive multi-model ENSO plume chart reproducing the IRI SST table.
-    Individual model lines + dynamical/statistical/all-model averages + observed.
+    Reproduces IRI 'Model Predictions of ENSO' chart:
+    - Each model gets its own color + marker symbol
+    - Observed values (DJF-OBS, Feb-OBS) at left; models fan out from last obs
+    - DYN AVG (dark red) and STAT AVG (dark green) as thick lines
     """
     seasons  = data.get("seasons", [])
-    x_labels = seasons
+    observed = data.get("observed", [])
+    avgs     = data.get("averages", {})
+
+    # x-axis: observed labels + forecast seasons
+    obs_labels = [f"{o['month']}-OBS" for o in observed]
+    obs_values = [o["data"]           for o in observed]
+    last_obs   = obs_values[-1] if obs_values else 0.0
 
     fig = go.Figure()
 
-    # ── Individual model lines ────────────────────────────────────────────────
-    type_colors = {
-        "Dynamical":   "rgba(230,100,50,0.35)",
-        "Statistical": "rgba(80,140,220,0.35)",
-        "Other":       "rgba(180,180,80,0.35)",
-    }
-
-    models_added = {}
-    for m in data.get("models", []):
-        raw   = m.get("data", [])
-        yvals = [v if v not in (-999, -999.0) else None for v in raw]
-        xvals = x_labels[:len(yvals)]
-        raw_type = (m.get("type") or "Dynamical").strip()
-        if "stat" in raw_type.lower():
-            mtype_norm = "Statistical"
-        elif raw_type == "Other":
-            mtype_norm = "Other"
-        else:
-            mtype_norm = "Dynamical"
-        color = type_colors[mtype_norm]
-        show  = mtype_norm not in models_added
-        models_added[mtype_norm] = True
-        fig.add_trace(go.Scatter(
-            x=xvals, y=yvals,
-            mode="lines",
-            name=mtype_norm,
-            legendgroup=mtype_norm,
-            showlegend=show,
-            line=dict(color=color, width=1),
-            hovertemplate=f"{m['model']}: %{{y:.2f}} C<extra></extra>",
-        ))
-
-    # ── Averages ─────────────────────────────────────────────────────────────
-    avgs = data.get("averages", {})
-    avg_specs = [
-        ("dynamical",   "Dynamical avg",   "rgb(230,100,50)",  2.5),
-        ("statistical", "Statistical avg", "rgb(80,140,220)",  2.5),
-        ("total",       "All models avg",  "rgb(255,255,255)", 3.0),
+    # ── Color + marker palette (one per model) ────────────────────────────────
+    MODEL_COLORS = [
+        "#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
+        "#8c564b","#e377c2","#bcbd22","#17becf","#aec7e8",
+        "#ffbb78","#98df8a","#ff9896","#c5b0d5","#c49c94",
+        "#f7b6d2","#dbdb8d","#9edae5","#393b79","#637939",
+        "#8c6d31","#843c39","#7b4173","#3182bd","#e6550d",
+        "#31a354","#756bb1",
     ]
-    for key, label, color, width in avg_specs:
-        raw   = avgs.get(key, [])
-        yvals = [v if v not in (-999, None) else None for v in raw]
-        xvals = x_labels[:len(yvals)]
-        if not yvals:
+    MODEL_MARKERS = [
+        "circle","square","diamond","triangle-up","triangle-down",
+        "pentagon","hexagon","star","cross","x",
+        "circle-open","square-open","diamond-open",
+        "triangle-up-open","triangle-down-open",
+        "triangle-left","triangle-right","bowtie","hourglass",
+        "circle-dot","square-dot","diamond-dot",
+    ]
+
+    # ── Individual model lines (fan from last observed point) ─────────────────
+    for i, m in enumerate(data.get("models", [])):
+        raw   = m.get("data", [])
+        fcast = [v if v not in (-999, -999.0) else None for v in raw]
+        if not any(v is not None for v in fcast):
             continue
+        x_m = [obs_labels[-1]] + seasons[:len(fcast)]
+        y_m = [last_obs]       + fcast
+        color  = MODEL_COLORS[i % len(MODEL_COLORS)]
+        marker = MODEL_MARKERS[i % len(MODEL_MARKERS)]
         fig.add_trace(go.Scatter(
-            x=xvals, y=yvals,
+            x=x_m, y=y_m,
             mode="lines+markers",
-            name=label,
-            line=dict(color=color, width=width),
-            marker=dict(size=6),
-            hovertemplate=f"{label}: %{{y:.2f}} C<extra></extra>",
+            name=m["model"],
+            line=dict(color=color, width=1.4),
+            marker=dict(size=5, symbol=marker, color=color),
+            hovertemplate=f"<b>{m['model']}</b>: %{{y:.2f}} C<extra></extra>",
         ))
 
-    # ── Observed Nino3.4 (last ~6 months as context) ─────────────────────────
-    obs = oni_df.sort_values("date").tail(8)
-    obs_x = [d.strftime("%b") for d in obs["date"]]
+    # ── Observed line ─────────────────────────────────────────────────────────
     fig.add_trace(go.Scatter(
-        x=obs_x, y=obs["oni"],
+        x=obs_labels, y=obs_values,
         mode="lines+markers",
-        name="ONI observed",
-        line=dict(color="rgb(0,210,160)", width=2, dash="dot"),
-        marker=dict(size=7, symbol="circle"),
-        hovertemplate="Observed %{x}: %{y:+.2f} C<extra></extra>",
+        name="Observed",
+        line=dict(color="white", width=3),
+        marker=dict(size=9, color="white", symbol="circle"),
+        hovertemplate="<b>Observed %{x}</b>: %{y:+.2f} C<extra></extra>",
     ))
 
+    # ── DYN AVG (dark red) and STAT AVG (dark green) ──────────────────────────
+    for key, label, color in [
+        ("dynamical",   "DYN AVG",  "#cc2200"),
+        ("statistical", "STAT AVG", "#007700"),
+    ]:
+        raw   = avgs.get(key, [])
+        fcast = [v if v not in (-999, -999.0, None) else None for v in raw]
+        if not any(v is not None for v in fcast):
+            continue
+        x_a = [obs_labels[-1]] + seasons[:len(fcast)]
+        y_a = [last_obs]       + fcast
+        fig.add_trace(go.Scatter(
+            x=x_a, y=y_a,
+            mode="lines+markers",
+            name=label,
+            line=dict(color=color, width=3.5),
+            marker=dict(size=8, color=color),
+            hovertemplate=f"<b>{label}</b>: %{{y:.2f}} C<extra></extra>",
+        ))
+
     # ── Threshold lines ───────────────────────────────────────────────────────
-    fig.add_hline(y= 0.5, line_color="rgba(220,50,50,0.5)",  line_dash="dot", line_width=1)
-    fig.add_hline(y=-0.5, line_color="rgba(50,100,220,0.5)", line_dash="dot", line_width=1)
-    fig.add_hline(y= 0,   line_color="white", line_width=0.5, opacity=0.15)
+    fig.add_hline(y= 0.5, line_color="rgba(255,255,255,0.4)", line_dash="dot", line_width=1.2)
+    fig.add_hline(y=-0.5, line_color="rgba(255,255,255,0.4)", line_dash="dot", line_width=1.2)
+    fig.add_hline(y= 0,   line_color="rgba(255,255,255,0.2)", line_width=1)
 
     fig.update_layout(
-        height=480,
+        height=520,
         template="plotly_dark",
-        yaxis_title="Nino 3.4 anomaly (C)",
-        xaxis_title="Season",
-        margin=dict(l=10, r=10, t=10, b=10),
+        yaxis_title="Nino 3.4 SST Anomaly (C)",
+        xaxis=dict(tickangle=-30),
+        margin=dict(l=10, r=160, t=10, b=10),
         hovermode="x unified",
         legend=dict(
             orientation="v",
-            yanchor="top", y=1.0,
+            yanchor="top",  y=1.0,
             xanchor="left", x=1.01,
             bgcolor="rgba(0,0,0,0)",
             borderwidth=0,
-            font=dict(size=11),
+            font=dict(size=10),
+            tracegroupgap=2,
         ),
     )
     return fig
