@@ -329,9 +329,9 @@ def make_prob_chart(enso_probs=None, fc=None):
         yaxis_title="Percent chance (%)",
         yaxis=dict(range=[0, 100], dtick=10, gridcolor="rgba(255,255,255,0.08)"),
         xaxis_title="Season",
-        height=380,
+        height=500,
         template="plotly_dark",
-        margin=dict(l=10, r=10, t=10, b=10),
+        margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(
             orientation="h",
             yanchor="bottom", y=1.02,
@@ -476,7 +476,9 @@ with tab2:
             "Showing probabilities from the damped-persistence model."
         )
 
-    st.plotly_chart(make_prob_chart(enso_probs, fc), use_container_width=True)
+    col_prob, _ = st.columns([2, 1])
+    with col_prob:
+        st.plotly_chart(make_prob_chart(enso_probs, fc), use_container_width=True)
 
     # Probability table
     show_table = st.toggle("Show probability table", value=False)
