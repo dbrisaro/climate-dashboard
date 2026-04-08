@@ -528,11 +528,38 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=3600)
+def load_iri_seasonal_maps():
+    """
+    Scrape og:image URLs from the IRI NMME seasonal forecast maproom pages.
+    These are dynamically generated GIF images, verified to return 200 OK.
+    Returns dict with 'temp' and 'prcp' image URLs, or None on failure.
+    """
+    BASE = "http://iridl.ldeo.columbia.edu"
+    sources = {
+        "temp": f"{BASE}/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/temp_full.html",
+        "prcp": f"{BASE}/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/precip_full.html",
+    }
+    result = {}
+    for key, url in sources.items():
+        try:
+            r = requests.get(url, timeout=20)
+            soup = BeautifulSoup(r.text, "html.parser")
+            og = soup.find("meta", property="og:image")
+            if og and og.get("content"):
+                src = og["content"]
+                result[key] = BASE + src if src.startswith("/") else src
+        except Exception:
+            pass
+    return result if result else None
+
+
 st.title("Climate Oscillation Monitor")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Current state",
-    "Forecasts",
+    "ENSO forecasts",
+    "T & P forecasts",
     "ENSO history",
     "About",
 ])
@@ -707,9 +734,100 @@ with tab2:
     )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 - ENSO HISTORY
+# TAB 3 - T & P FORECASTS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
+    st.subheader("Seasonal temperature and precipitation forecasts")
+    st.markdown(
+        "Probabilistic seasonal forecasts from the NMME (North American Multi-Model Ensemble) "
+        "via IRI (Columbia University). Maps show the probability of above or below normal "
+        "conditions for the upcoming 3-month season."
+    )
+
+    seasonal_maps = load_iri_seasonal_maps()
+
+    if seasonal_maps:
+        col_t, col_p = st.columns(2)
+
+        with col_t:
+            st.markdown("#### Temperature")
+            if "temp" in seasonal_maps:
+                st.image(
+                    seasonal_maps["temp"],
+                    caption="Probability of above/below normal temperature (NMME, IRI)",
+                    use_container_width=True,
+                )
+            else:
+                st.warning("Temperature map not available.")
+
+        with col_p:
+            st.markdown("#### Precipitation")
+            if "prcp" in seasonal_maps:
+                st.image(
+                    seasonal_maps["prcp"],
+                    caption="Probability of above/below normal precipitation (NMME, IRI)",
+                    use_container_width=True,
+                )
+            else:
+                st.warning("Precipitation map not available.")
+
+        st.caption(
+            "Source: IRI/LDEO Climate Data Library — "
+            "NMME Seasonal Forecasts — Updated monthly  |  "
+            "[Interactive maproom](http://iridl.ldeo.columbia.edu/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/)"
+        )
+    else:
+        st.warning("Could not load IRI seasonal forecast maps.")
+        st.link_button(
+            "Open IRI NMME Seasonal Forecast Maproom",
+            "http://iridl.ldeo.columbia.edu/maproom/Global/Forecasts/NMME_Seasonal_Forecasts/",
+        )
+
+    st.divider()
+
+    # ── CPC 90-day seasonal outlooks ─────────────────────────────────────────
+    st.markdown("### NOAA CPC 90-day seasonal outlook")
+    st.markdown(
+        "Probability of above or below normal temperature and precipitation "
+        "for the next 3 months. Colors indicate which tercile is most likely."
+    )
+
+    cpc_col1, cpc_col2 = st.columns(2)
+    cpc_temp_url = "https://www.cpc.ncep.noaa.gov/products/predictions/multi_season/13_seasonal_outlooks/color/t.gif"
+    cpc_prcp_url = "https://www.cpc.ncep.noaa.gov/products/predictions/multi_season/13_seasonal_outlooks/color/p.gif"
+
+    with cpc_col1:
+        st.markdown("#### Temperature")
+        try:
+            r = requests.head(cpc_temp_url, timeout=8)
+            if r.status_code == 200:
+                st.image(cpc_temp_url, caption="CPC 90-day temperature outlook", use_container_width=True)
+            else:
+                raise ValueError()
+        except Exception:
+            st.warning("CPC temperature outlook not available.")
+
+    with cpc_col2:
+        st.markdown("#### Precipitation")
+        try:
+            r = requests.head(cpc_prcp_url, timeout=8)
+            if r.status_code == 200:
+                st.image(cpc_prcp_url, caption="CPC 90-day precipitation outlook", use_container_width=True)
+            else:
+                raise ValueError()
+        except Exception:
+            st.warning("CPC precipitation outlook not available.")
+
+    st.caption(
+        "Source: NOAA CPC 13-season outlooks  |  "
+        "[Full CPC outlooks page](https://www.cpc.ncep.noaa.gov/products/predictions/90day/)"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 - ENSO HISTORY
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
     st.subheader("ENSO event history")
 
     events = detect_enso_events(oni)
@@ -822,9 +940,9 @@ with tab3:
             st.plotly_chart(fig_cmp, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 - ABOUT
+# TAB 5 - ABOUT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab4:
+with tab5:
     st.subheader("About the indices")
     st.markdown("""
 **ONI - Oceanic Nino Index**
