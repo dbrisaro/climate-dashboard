@@ -3,8 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 st.set_page_config(
-    page_title="Climate Indices — South America",
-    page_icon="🌊",
+    page_title="Climate Indices - South America",
     layout="wide",
 )
 
@@ -21,8 +20,8 @@ def load_all():
 
 oni, mei, sam, iod, nino34 = load_all()
 
-# ── Header ────────────────────────────────────────────────────────────────────
-st.title("Climate Indices — South America")
+# Header
+st.title("Climate Indices - South America")
 st.markdown(
     """
     Large-scale climate oscillations shape rainfall, temperature, and extreme events
@@ -31,20 +30,20 @@ st.markdown(
     """
 )
 
-# ── Current state ─────────────────────────────────────────────────────────────
+# Current state
 st.subheader("Current state")
 
 def latest(df, col):
     return df.dropna(subset=[col]).iloc[-1][col]
 
 def enso_label(val):
-    if val >= 1.5:   return "Strong El Niño 🔴"
-    if val >= 1.0:   return "Moderate El Niño 🟠"
-    if val >= 0.5:   return "Weak El Niño 🟡"
-    if val <= -1.5:  return "Strong La Niña 🔵"
-    if val <= -1.0:  return "Moderate La Niña 🩵"
-    if val <= -0.5:  return "Weak La Niña 🔵"
-    return "Neutral 🟢"
+    if val >= 1.5:  return "Strong El Nino"
+    if val >= 1.0:  return "Moderate El Nino"
+    if val >= 0.5:  return "Weak El Nino"
+    if val <= -1.5: return "Strong La Nina"
+    if val <= -1.0: return "Moderate La Nina"
+    if val <= -0.5: return "Weak La Nina"
+    return "Neutral"
 
 oni_val    = latest(oni,    "oni")
 nino34_val = latest(nino34, "nino34")
@@ -53,15 +52,15 @@ sam_val    = latest(sam,    "sam")
 iod_val    = latest(iod,    "iod")
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("ONI",      f"{oni_val:+.2f} °C",    enso_label(oni_val))
-c2.metric("Niño 3.4", f"{nino34_val:+.2f} °C", enso_label(nino34_val))
+c1.metric("ONI",      f"{oni_val:+.2f} C",    enso_label(oni_val))
+c2.metric("Nino 3.4", f"{nino34_val:+.2f} C", enso_label(nino34_val))
 c3.metric("MEI",      f"{mei_val:+.2f}")
 c4.metric("SAM",      f"{sam_val:+.2f}")
-c5.metric("IOD",      f"{iod_val:+.2f} °C")
+c5.metric("IOD",      f"{iod_val:+.2f} C")
 
 st.divider()
 
-# ── Time range selector ───────────────────────────────────────────────────────
+# Time range selector
 st.subheader("Historical time series")
 
 year_min = 1979
@@ -76,7 +75,7 @@ def filt(df):
     return df[(df["date"].dt.year >= y_start) & (df["date"].dt.year <= y_end)]
 
 def threshold_shapes(ymin=-3, ymax=3):
-    """Shaded bands for El Niño / La Niña thresholds."""
+    """Shaded bands for El Nino / La Nina thresholds."""
     return [
         dict(type="rect", xref="paper", yref="y",
              x0=0, x1=1, y0=0.5, y1=ymax,
@@ -116,64 +115,64 @@ def make_ts(df, x_col, y_col, title, ylabel, color, shapes=None):
     )
     return fig
 
-# ── Row 1: ONI + Niño 3.4 ─────────────────────────────────────────────────────
+# Row 1: ONI + Nino 3.4
 col1, col2 = st.columns(2)
 with col1:
     st.plotly_chart(make_ts(
         oni, "date", "oni",
-        "ONI — Oceanic Niño Index", "Anomaly (°C)",
+        "ONI - Oceanic Nino Index", "Anomaly (C)",
         "rgb(239,85,59)", threshold_shapes(),
     ), use_container_width=True)
 with col2:
     st.plotly_chart(make_ts(
         nino34, "date", "nino34",
-        "Niño 3.4 SST Anomaly", "Anomaly (°C)",
+        "Nino 3.4 SST Anomaly", "Anomaly (C)",
         "rgb(99,110,250)", threshold_shapes(),
     ), use_container_width=True)
 
-# ── Row 2: MEI + SAM ──────────────────────────────────────────────────────────
+# Row 2: MEI + SAM
 col3, col4 = st.columns(2)
 with col3:
     st.plotly_chart(make_ts(
         mei, "date", "mei",
-        "MEI — Multivariate ENSO Index", "MEI",
+        "MEI - Multivariate ENSO Index", "MEI",
         "rgb(239,85,59)", threshold_shapes(-4, 4),
     ), use_container_width=True)
 with col4:
     st.plotly_chart(make_ts(
         sam, "date", "sam",
-        "SAM — Southern Annular Mode", "SAM index",
+        "SAM - Southern Annular Mode", "SAM index",
         "rgb(0,204,150)",
     ), use_container_width=True)
 
-# ── Row 3: IOD ────────────────────────────────────────────────────────────────
+# Row 3: IOD + About
 col5, col6 = st.columns(2)
 with col5:
     st.plotly_chart(make_ts(
         iod, "date", "iod",
-        "IOD — Indian Ocean Dipole", "Anomaly (°C)",
+        "IOD - Indian Ocean Dipole", "Anomaly (C)",
         "rgb(171,99,250)",
     ), use_container_width=True)
 with col6:
     st.markdown("### About the indices")
     st.markdown("""
-**ONI / Niño 3.4** — 3-month running mean of SST anomalies in the Niño 3.4 region
-(5°N–5°S, 170°W–120°W). Threshold: ±0.5 °C for 5 consecutive seasons.
-El Niño brings drought to NE Brazil and wetter conditions to SE South America.
+**ONI / Nino 3.4** - 3-month running mean of SST anomalies in the Nino 3.4 region
+(5N-5S, 170W-120W). Threshold: +/-0.5 C for 5 consecutive seasons.
+El Nino brings drought to NE Brazil and wetter conditions to SE South America.
 
-**MEI** — Multivariate ENSO Index v2. Combines SLP, SST, surface winds, and OLR
+**MEI** - Multivariate ENSO Index v2. Combines SLP, SST, surface winds, and OLR
 over the tropical Pacific. Bimonthly.
 
-**SAM** — Southern Annular Mode (AAO). Positive phase = stronger westerlies,
-drier conditions over subtropical South America.
+**SAM** - Southern Annular Mode (AAO). Positive phase means stronger westerlies
+and drier conditions over subtropical South America.
 
-**IOD** — Indian Ocean Dipole. Positive events can amplify El Niño teleconnections
+**IOD** - Indian Ocean Dipole. Positive events can amplify El Nino teleconnections
 over South America via atmospheric Rossby waves.
 
 ---
 *Data updated daily from NOAA CPC / PSL via GitHub Actions.*
 """)
 
-# ── Footer ────────────────────────────────────────────────────────────────────
+# Footer
 st.divider()
-st.caption("Data sources: NOAA CPC (ONI, Niño 3.4, SAM) · NOAA PSL (MEI, IOD) · Updated daily via GitHub Actions")
+st.caption("Data sources: NOAA CPC (ONI, Nino 3.4, SAM) - NOAA PSL (MEI, IOD) - Updated daily via GitHub Actions")
