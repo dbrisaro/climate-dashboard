@@ -586,21 +586,24 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
             + cbar_title + ": <b>%{marker.color:.2f}</b><extra></extra>"
         ),
     ))
-    fig.update_geos(
-        scope="south america",
-        showcoastlines=True,  coastlinecolor="rgba(220,220,220,0.7)",
-        showborders=True,     bordercolor="rgba(200,200,200,0.5)",
-        showland=True,        landcolor="rgba(35,35,35,0.6)",
-        showocean=True,       oceancolor="rgba(15,20,40,0.7)",
-        showlakes=False,
-        bgcolor="rgba(0,0,0,0)",
-    )
     fig.update_layout(
         title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
         template="plotly_dark",
         height=580,
         margin=dict(l=0, r=0, t=40, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
+        geo=dict(
+            scope="south america",
+            showcoastlines=True,
+            coastlinecolor="rgba(220,220,220,0.7)",
+            showborders=True,
+            bordercolor="rgba(200,200,200,0.5)",
+            showland=True,
+            landcolor="rgba(35,35,35,0.6)",
+            showocean=True,
+            oceancolor="rgba(15,20,40,0.7)",
+            showlakes=False,
+        ),
     )
     return fig
 
