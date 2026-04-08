@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 st.set_page_config(
-    page_title="Climate Indices - South America",
+    page_title="Climate Oscillation Monitor",
     layout="wide",
 )
 
@@ -528,7 +528,7 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 
-st.title("Climate Indices - South America")
+st.title("Climate Oscillation Monitor")
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "Current state",
