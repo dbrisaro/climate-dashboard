@@ -582,7 +582,7 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
         coloraxis_colorbar=dict(title=cbar_title, thickness=14, len=0.75),
         geo=dict(
             showcoastlines=True,
-            showborders=True,
+            showcountries=True,
             showland=True,
             showocean=True,
             lonaxis=dict(range=[-92, -28]),
