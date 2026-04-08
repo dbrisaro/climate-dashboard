@@ -557,16 +557,14 @@ for _i, _c in enumerate(_BIN_COLORS):
     _TERCILE_COLORSCALE.append([(_i + 1) / _N, _c])
 
 
-def make_nmme_prob_map(df, title):
+def make_nmme_prob_map(df):
     """
     IRI-style tercile probability map.
 
     Signal:
-      +prob_above  where prob_above ≥ 40 % and is the dominant category (green)
-      -prob_below  where prob_below ≥ 40 % and is the dominant category (brown)
-      NaN          everywhere else  → shows as white (plot_bgcolor)
-
-    This reproduces the IRI seasonal forecast style exactly.
+      +prob_above  where prob_above >= 40% and is the dominant category (green)
+      -prob_below  where prob_below >= 40% and is the dominant category (brown)
+      NaN          everywhere else  -> shows as white (plot_bgcolor)
     """
     df = df.copy()
 
@@ -619,17 +617,15 @@ def make_nmme_prob_map(df, title):
         ))
 
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center",
-                   font=dict(size=14, color="#222")),
-        height=560,
-        margin=dict(l=10, r=10, t=40, b=10),
+        height=520,
+        margin=dict(l=10, r=10, t=10, b=10),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
                    tickfont=dict(color="#555"), tickcolor="#aaa"),
         yaxis=dict(range=[-58, 16], title="", showgrid=False,
                    zeroline=False, scaleanchor="x", scaleratio=1,
                    tickfont=dict(color="#555"), tickcolor="#aaa"),
-        plot_bgcolor="white",          # NaN → white = "equal chances / no signal"
+        plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
@@ -725,49 +721,51 @@ def load_sa_borders():
     return lons_out, lats_out
 
 
-def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging=True):
+def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=True):
     """
-    Smooth filled-contour map (like contourf) of a SEAS5 field over South America.
-    Uses go.Contour on a pivoted 2-D grid + country border lines.
-    diverging=True  → symmetric ±vrange (anomaly maps)
-    diverging=False → 0..vmax range (absolute maps like precipitation)
+    Discrete filled-contour map of a SEAS5 field over South America.
+    Uses go.Contour with explicit step size for a discrete colorbar.
+    diverging=True  -> symmetric +-vrange (anomaly maps)
+    diverging=False -> 0..vmax range (absolute maps like precipitation)
     """
     vals = df["anom"]
     if diverging:
         if vrange is None:
             vrange = max(abs(float(vals.quantile(0.02))),
-                         abs(float(vals.quantile(0.98))), 0.3)
-        vrange = round(float(vrange), 3)
+                         abs(float(vals.quantile(0.98))), step)
+        # Round vrange up to nearest step multiple so bins are symmetric
+        import math as _math
+        vrange = round(_math.ceil(float(vrange) / step) * step, 6)
         zmin, zmax = -vrange, vrange
     else:
-        zmin = max(0.0, float(vals.quantile(0.02)))
-        zmax = float(vals.quantile(0.98))
+        zmin = 0.0
+        zmax = round(_math.ceil(float(vals.quantile(0.98)) / step) * step, 6)
+        if zmax == 0:
+            zmax = step
 
-    # Pivot to 2-D grid (lat ascending = south→north, correct for Plotly y-axis)
     pivot = df.pivot_table(index="lat", columns="lon", values="anom")
-    lats  = pivot.index.values        # ascending
+    lats  = pivot.index.values
     lons  = pivot.columns.values
     z     = pivot.values
 
     fig = go.Figure()
 
-    # ── Filled contour layer ─────────────────────────────────────────────────
     fig.add_trace(go.Contour(
         x=lons, y=lats, z=z,
         colorscale=colorscale,
         zmin=zmin, zmax=zmax,
-        contours_coloring="heatmap",   # smooth fill like contourf
-        ncontours=21,
-        line=dict(width=0),            # hide contour lines
+        contours=dict(start=zmin, end=zmax, size=step),
+        contours_coloring="fill",
+        line=dict(width=0.3, color="rgba(180,180,180,0.2)"),
         colorbar=dict(
             title=dict(text=cbar_title, side="right"),
             thickness=14, len=0.80, outlinewidth=0,
+            tickfont=dict(size=10),
         ),
-        hovertemplate="Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
+        hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>"
                       + cbar_title + ": <b>%{z:.2f}</b><extra></extra>",
     ))
 
-    # ── Country borders ───────────────────────────────────────────────────────
     border_lons, border_lats = load_sa_borders()
     if border_lons:
         fig.add_trace(go.Scatter(
@@ -779,10 +777,8 @@ def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging
         ))
 
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center",
-                   font=dict(size=14, color="#222")),
-        height=560,
-        margin=dict(l=10, r=10, t=40, b=10),
+        height=520,
+        margin=dict(l=10, r=10, t=10, b=10),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
                    tickfont=dict(color="#555"), tickcolor="#aaa"),
@@ -1067,20 +1063,16 @@ because the ensemble models spread out and agree less on which tercile will be m
         with col_t:
             if "tmp2m" in nmme:
                 sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
-                st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Temperature - {seas_str}"),
-                    use_container_width=True,
-                )
+                st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                st.caption(f"NMME temperature tercile probabilities - {seas_str}")
             else:
                 st.warning("Temperature forecast not yet available.")
 
         with col_p:
             if "prate" in nmme:
                 sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
-                st.plotly_chart(
-                    make_nmme_prob_map(sub, f"Precipitation - {seas_str}"),
-                    use_container_width=True,
-                )
+                st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                st.caption(f"NMME precipitation tercile probabilities - {seas_str}")
             else:
                 st.warning("Precipitation forecast not yet available.")
 
@@ -1146,13 +1138,14 @@ because the ensemble models spread out and agree less on which tercile will be m
                     st.plotly_chart(
                         make_seas5_geo_map(
                             sub,
-                            title=f"SEAS5 Temperature anomaly - {seas_str_s5}",
                             colorscale="RdBu_r",
-                            cbar_title="T2m anomaly (°C)",
+                            cbar_title="T2m anomaly (C)",
+                            step=0.5,
                             diverging=True,
                         ),
                         use_container_width=True,
                     )
+                    st.caption(f"SEAS5 temperature anomaly (C, vs 1993-2016) - {seas_str_s5}")
                 else:
                     st.warning("No SEAS5 temperature data for this season.")
             else:
@@ -1165,13 +1158,14 @@ because the ensemble models spread out and agree less on which tercile will be m
                     st.plotly_chart(
                         make_seas5_geo_map(
                             sub,
-                            title=f"SEAS5 Precipitation - {seas_str_s5}",
                             colorscale="YlGnBu",
                             cbar_title="Precipitation (mm/day)",
+                            step=1.0,
                             diverging=False,
                         ),
                         use_container_width=True,
                     )
+                    st.caption(f"SEAS5 precipitation ensemble mean (mm/day) - {seas_str_s5}")
                 else:
                     st.warning("No SEAS5 precipitation data for this season.")
             else:
