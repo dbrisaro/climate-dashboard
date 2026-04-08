@@ -24,7 +24,8 @@ def load_all():
     iod    = pd.read_csv(f"{BASE_URL}/iod.csv",    parse_dates=["date"])
     nino34 = pd.read_csv(f"{BASE_URL}/nino34.csv", parse_dates=["date"])
     nino12 = pd.read_csv(f"{BASE_URL}/nino12.csv", parse_dates=["date"])
-    return oni, mei, sam, iod, nino34, nino12
+    soi    = pd.read_csv(f"{BASE_URL}/soi.csv",    parse_dates=["date"])
+    return oni, mei, sam, iod, nino34, nino12, soi
 
 @st.cache_data(ttl=3600)
 def load_enso_probs():
@@ -218,7 +219,7 @@ def get_iri_figures():
     except Exception:
         return []
 
-oni, mei, sam, iod, nino34, nino12 = load_all()
+oni, mei, sam, iod, nino34, nino12, soi = load_all()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -553,14 +554,16 @@ with tab1:
     mei_val    = latest(mei,    "mei")
     sam_val    = latest(sam,    "sam")
     iod_val    = latest(iod,    "iod")
+    soi_val    = latest(soi,    "soi")
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("ONI",           f"{oni_val:+.2f} C",    enso_label(oni_val))
-    c2.metric("Nino 3.4",      f"{nino34_val:+.2f} C", enso_label(nino34_val))
-    c3.metric("Nino 1+2 (Coastal)", f"{nino12_val:+.2f} C", enso_label(nino12_val))
-    c4.metric("MEI",           f"{mei_val:+.2f}")
-    c5.metric("SAM",           f"{sam_val:+.2f}")
-    c6.metric("IOD",           f"{iod_val:+.2f} C")
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    c1.metric("ONI",                 f"{oni_val:+.2f} C",    enso_label(oni_val))
+    c2.metric("Nino 3.4",            f"{nino34_val:+.2f} C", enso_label(nino34_val))
+    c3.metric("Nino 1+2 (Coastal)",  f"{nino12_val:+.2f} C", enso_label(nino12_val))
+    c4.metric("MEI",                 f"{mei_val:+.2f}")
+    c5.metric("SOI",                 f"{soi_val:+.2f}")
+    c6.metric("SAM",                 f"{sam_val:+.2f}")
+    c7.metric("IOD",                 f"{iod_val:+.2f} C")
 
     st.divider()
     st.subheader("Historical time series")
@@ -598,11 +601,18 @@ with tab1:
 
     col5, col6 = st.columns(2)
     with col5:
+        st.plotly_chart(make_ts(soi, "date", "soi",
+            "SOI - Southern Oscillation Index", "SOI",
+            "rgb(0,180,255)", y_start=y_start, y_end=y_end,
+        ), use_container_width=True)
+    with col6:
         st.plotly_chart(make_ts(sam, "date", "sam",
             "SAM - Southern Annular Mode", "SAM index",
             "rgb(0,204,150)", y_start=y_start, y_end=y_end,
         ), use_container_width=True)
-    with col6:
+
+    col7, col8 = st.columns(2)
+    with col7:
         st.plotly_chart(make_ts(iod, "date", "iod",
             "IOD - Indian Ocean Dipole", "Anomaly (C)",
             "rgb(171,99,250)", y_start=y_start, y_end=y_end,
@@ -829,6 +839,11 @@ Source: NOAA CPC ERSSTv5.
 SST anomaly in the region closest to the South American coast (10S-0, 90W-80W).
 Most directly related to the coastal El Nino that affects Peru and Ecuador.
 Source: NOAA CPC ERSSTv5.
+
+**SOI - Southern Oscillation Index**
+Standardized difference in surface air pressure between Tahiti and Darwin, Australia.
+Negative SOI = El Nino conditions (low pressure over Tahiti, high over Darwin).
+Positive SOI = La Nina conditions. Source: NOAA CPC.
 
 **MEI - Multivariate ENSO Index v2**
 Combines sea level pressure, SST, surface winds, and outgoing longwave radiation

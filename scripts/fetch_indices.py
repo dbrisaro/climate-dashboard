@@ -229,6 +229,46 @@ def fetch_nino34():
     return df34
 
 
+# ── SOI ──────────────────────────────────────────────────────────────────────
+
+def fetch_soi():
+    """
+    NOAA CPC Southern Oscillation Index (standardized Tahiti minus Darwin SLP).
+    URL: https://www.cpc.ncep.noaa.gov/data/indices/soi
+    Format: YEAR  JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC
+    Missing values coded as -999.9
+    """
+    url = "https://www.cpc.ncep.noaa.gov/data/indices/soi"
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+
+    rows = []
+    for line in resp.text.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 13:
+            continue
+        if not parts[0].isdigit():
+            continue
+        try:
+            year = int(parts[0])
+        except ValueError:
+            continue
+        for month in range(1, 13):
+            try:
+                val = float(parts[month])
+                if val not in (-999.9, -999.0):
+                    rows.append({"year": year, "month": month, "soi": val})
+            except (ValueError, IndexError):
+                pass
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
+    out = DATA_DIR / "soi.csv"
+    df.to_csv(out, index=False)
+    print(f"SOI saved: {len(df)} rows -> {out}")
+    return df
+
+
 # ── Atlantic Niño (ATL3) ──────────────────────────────────────────────────────
 # ATL3 = SST anomaly averaged over 3°S–3°N, 20°W–0°E.
 # No public pre-computed download is currently available without authentication
@@ -364,5 +404,6 @@ if __name__ == "__main__":
     fetch_sam()
     fetch_iod()
     fetch_nino34()
+    fetch_soi()
     fetch_enso_probs()
     print("Done.")
