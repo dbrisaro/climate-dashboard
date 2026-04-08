@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import requests
 from bs4 import BeautifulSoup
 
@@ -561,48 +560,111 @@ def load_seas5_sa_maps():
     return result if result else None
 
 
+@st.cache_data(ttl=86400)
+def load_sa_borders():
+    """
+    Download Natural Earth 110m country polygons and return
+    lists of (lons, lats) for polygons that overlap South America.
+    Result is a single pair of flat lists with None separators —
+    ready for a single go.Scatter trace.
+    """
+    url = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector"
+           "/master/geojson/ne_110m_admin_0_countries.geojson")
+    try:
+        r = requests.get(url, timeout=15)
+        features = r.json()["features"]
+    except Exception:
+        return [], []
+
+    lons_out, lats_out = [], []
+    for feat in features:
+        geom = feat.get("geometry")
+        if not geom:
+            continue
+        polys = (geom["coordinates"] if geom["type"] == "Polygon"
+                 else geom["coordinates"] if geom["type"] != "MultiPolygon"
+                 else geom["coordinates"])
+        if geom["type"] == "Polygon":
+            polys = [geom["coordinates"]]
+        elif geom["type"] == "MultiPolygon":
+            polys = geom["coordinates"]
+        else:
+            continue
+        for poly in polys:
+            ring = poly[0]
+            lo = [c[0] for c in ring]
+            la = [c[1] for c in ring]
+            # Keep only rings that overlap the SA bounding box
+            if any(-92 <= x <= -28 and -58 <= y <= 16 for x, y in zip(lo, la)):
+                lons_out += lo + [None]
+                lats_out += la + [None]
+    return lons_out, lats_out
+
+
 def make_seas5_geo_map(df, title, colorscale, cbar_title, vrange=None, diverging=True):
     """
-    Interactive Plotly geo scatter map of a SEAS5 field over South America.
-    Uses px.scatter_geo — fully interactive, no pixels.
+    Smooth filled-contour map (like contourf) of a SEAS5 field over South America.
+    Uses go.Contour on a pivoted 2-D grid + country border lines.
     diverging=True  → symmetric ±vrange (anomaly maps)
-    diverging=False → 0..vrange range (absolute maps like precipitation)
+    diverging=False → 0..vmax range (absolute maps like precipitation)
     """
     vals = df["anom"]
     if diverging:
         if vrange is None:
-            vrange = max(abs(vals.quantile(0.02)), abs(vals.quantile(0.98)), 0.3)
+            vrange = max(abs(float(vals.quantile(0.02))),
+                         abs(float(vals.quantile(0.98))), 0.3)
         vrange = round(float(vrange), 3)
-        cmin, cmax = -vrange, vrange
+        zmin, zmax = -vrange, vrange
     else:
-        cmin = max(0.0, float(vals.quantile(0.02)))
-        cmax = float(vals.quantile(0.98))
+        zmin = max(0.0, float(vals.quantile(0.02)))
+        zmax = float(vals.quantile(0.98))
 
-    fig = px.scatter_geo(
-        df,
-        lat="lat",
-        lon="lon",
-        color="anom",
-        color_continuous_scale=colorscale,
-        range_color=[cmin, cmax],
-        template="plotly_dark",
-        title=title,
-        labels={"anom": cbar_title},
-        hover_data={"lat": ":.1f", "lon": ":.1f", "anom": ":.2f"},
-    )
-    fig.update_traces(marker=dict(size=8, opacity=0.9))
-    fig.update_layout(
-        height=580,
-        margin=dict(l=0, r=0, t=40, b=0),
-        coloraxis_colorbar=dict(title=cbar_title, thickness=14, len=0.75),
-        geo=dict(
-            showcoastlines=True,
-            showcountries=True,
-            showland=True,
-            showocean=True,
-            lonaxis=dict(range=[-92, -28]),
-            lataxis=dict(range=[-58, 16]),
+    # Pivot to 2-D grid (lat ascending = south→north, correct for Plotly y-axis)
+    pivot = df.pivot_table(index="lat", columns="lon", values="anom")
+    lats  = pivot.index.values        # ascending
+    lons  = pivot.columns.values
+    z     = pivot.values
+
+    fig = go.Figure()
+
+    # ── Filled contour layer ─────────────────────────────────────────────────
+    fig.add_trace(go.Contour(
+        x=lons, y=lats, z=z,
+        colorscale=colorscale,
+        zmin=zmin, zmax=zmax,
+        contours_coloring="heatmap",   # smooth fill like contourf
+        ncontours=21,
+        line=dict(width=0),            # hide contour lines
+        colorbar=dict(
+            title=dict(text=cbar_title, side="right"),
+            thickness=14, len=0.80, outlinewidth=0,
         ),
+        hovertemplate="Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
+                      + cbar_title + ": <b>%{z:.2f}</b><extra></extra>",
+    ))
+
+    # ── Country borders ───────────────────────────────────────────────────────
+    border_lons, border_lats = load_sa_borders()
+    if border_lons:
+        fig.add_trace(go.Scatter(
+            x=border_lons, y=border_lats,
+            mode="lines",
+            line=dict(color="rgba(220,220,220,0.75)", width=0.8),
+            hoverinfo="skip",
+            showlegend=False,
+        ))
+
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
+        template="plotly_dark",
+        height=560,
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis=dict(range=[-92, -28], title="Longitude", showgrid=False,
+                   zeroline=False, constrain="domain"),
+        yaxis=dict(range=[-58, 16],  title="Latitude",  showgrid=False,
+                   zeroline=False, scaleanchor="x", scaleratio=1),
+        plot_bgcolor="rgba(17,17,34,1)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
 
