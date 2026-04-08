@@ -26,6 +26,18 @@ def load_all():
     return oni, mei, sam, iod, nino34, nino12
 
 @st.cache_data(ttl=3600)
+def load_seas5_mean():
+    """Load SEAS5 ensemble-mean Nino3.4 forecast if available."""
+    try:
+        df = pd.read_csv(
+            f"{BASE_URL}/forecasts/nino34_seas5_mean.csv",
+            parse_dates=["forecast_date"],
+        )
+        return df if len(df) > 0 else None
+    except Exception:
+        return None
+
+@st.cache_data(ttl=3600)
 def get_iri_figures():
     """Scrape IRI ENSO page to get current figure URLs."""
     try:
@@ -229,8 +241,8 @@ def fetch_cpc_enso_probs():
         return None
 
 
-def make_plume_chart(fc):
-    """Plotly figure with damped-persistence forecast plume."""
+def make_plume_chart(fc, seas5=None):
+    """Plotly figure with damped-persistence forecast plume + optional SEAS5 mean."""
     fig = go.Figure()
 
     # 90% envelope
@@ -273,12 +285,23 @@ def make_plume_chart(fc):
         hovertemplate="%{x|%b %Y}: %{y:+.2f} C<extra></extra>",
     ))
 
+    # SEAS5 ensemble mean (optional)
+    if seas5 is not None and len(seas5) > 0:
+        fig.add_trace(go.Scatter(
+            x=seas5["forecast_date"], y=seas5["anom_seas5"],
+            mode="lines+markers",
+            name="ECMWF SEAS5 mean",
+            line=dict(color="rgb(0,204,150)", width=2.5, dash="dash"),
+            marker=dict(size=6, symbol="diamond"),
+            hovertemplate="%{x|%b %Y}: %{y:+.2f} C<extra></extra>",
+        ))
+
     fig.add_hline(y= 0.5, line_color="rgba(220,50,50,0.5)",  line_dash="dot", line_width=1)
     fig.add_hline(y=-0.5, line_color="rgba(50,100,220,0.5)", line_dash="dot", line_width=1)
     fig.add_hline(y= 0,   line_color="white", line_width=0.5, opacity=0.2)
 
     fig.update_layout(
-        title="Nino 3.4 anomaly forecast - damped persistence",
+        title="Nino 3.4 anomaly forecast",
         yaxis_title="Anomaly (C)",
         height=380,
         template="plotly_dark",
@@ -440,8 +463,9 @@ with tab2:
     # ── Interactive forecast plume ────────────────────────────────────────────
     st.markdown("### Forecast plume")
 
-    fc = compute_damped_persistence(n_leads=7)
-    st.plotly_chart(make_plume_chart(fc), use_container_width=True)
+    fc    = compute_damped_persistence(n_leads=7)
+    seas5 = load_seas5_mean()
+    st.plotly_chart(make_plume_chart(fc, seas5), use_container_width=True)
 
     with st.expander("About the forecast method"):
         st.markdown(
