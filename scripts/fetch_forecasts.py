@@ -19,6 +19,8 @@ API key is read from:
 
 import os
 import cdsapi
+import requests
+import numpy as np
 import xarray as xr
 import pandas as pd
 from pathlib import Path
@@ -332,6 +334,112 @@ def fetch_seas5_sa_maps():
             print(f"ERROR processing precipitation: {e}")
 
 
+def fetch_nmme_probs():
+    """
+    Download CPC NMME tercile probability forecasts for SA from the public FTP.
+    URL: https://ftp.cpc.ncep.noaa.gov/NMME/prob/netcdf/{var}.{YYYYMM}.prob.seas.nc
+    Variables: tmp2m (temperature), prate (precipitation)
+    Probabilities: prob_above, prob_norm, prob_below  (fractions 0-1, 7 leads)
+
+    Saves:
+      data/forecasts/nmme_tmp2m_probs_SA.csv
+      data/forecasts/nmme_prate_probs_SA.csv
+    Columns: lat, lon, lead_month, forecast_date, prob_above, prob_norm, prob_below,
+             init_year, init_month
+    """
+    BASE = "https://ftp.cpc.ncep.noaa.gov/NMME/prob/netcdf"
+    now  = datetime.utcnow()
+
+    # Try current month first, fall back to previous if file not yet published
+    init_ym = None
+    for delta in [0, -1, -2]:
+        candidate = (now.replace(day=1) + pd.DateOffset(months=delta))
+        ym = candidate.strftime("%Y%m")
+        test_url = f"{BASE}/tmp2m.{ym}.prob.seas.nc"
+        try:
+            r = requests.head(test_url, timeout=10)
+            if r.status_code == 200:
+                init_ym = ym
+                break
+        except Exception:
+            pass
+    if init_ym is None:
+        print("NMME prob files not reachable — skipping")
+        return
+
+    print(f"Using NMME init month: {init_ym}")
+
+    for var_name, out_stem in [("tmp2m", "nmme_tmp2m_probs_SA"),
+                                ("prate", "nmme_prate_probs_SA")]:
+        nc_path = DATA_DIR / f"{var_name}_{init_ym}_prob.nc"
+        out_csv = DATA_DIR / f"{out_stem}.csv"
+        url     = f"{BASE}/{var_name}.{init_ym}.prob.seas.nc"
+
+        if not nc_path.exists():
+            print(f"Downloading {url} …")
+            try:
+                r = requests.get(url, timeout=120)
+                r.raise_for_status()
+                nc_path.write_bytes(r.content)
+                print(f"Downloaded {nc_path}  ({len(r.content)//1024} kB)")
+            except Exception as e:
+                print(f"ERROR downloading {url}: {e}")
+                continue
+        else:
+            print(f"Using cached {nc_path}")
+
+        try:
+            ds = xr.open_dataset(nc_path, decode_times=False)
+
+            # Decode target months (units: "months since 1960-01-01")
+            ref    = pd.Timestamp("1960-01-01")
+            t_dates = [ref + pd.DateOffset(months=int(m))
+                       for m in ds["target"].values]
+
+            lat = ds["lat"].values   # -90 to 90
+            lon = ds["lon"].values   # 0 to 359
+
+            # SA bounding box in 0-360 convention: lon 270-330
+            lat_idx = np.where((lat >= -60) & (lat <= 15))[0]
+            lon_idx = np.where((lon >= 270) & (lon <= 330))[0]
+            lat_sa  = lat[lat_idx]
+            lon_sa  = lon[lon_idx]
+
+            slices = []
+            for i, tdate in enumerate(t_dates):
+                if i == 0:          # lead 0 = init month itself (NaN in prate)
+                    continue
+                pa = ds["prob_above"].values[i][np.ix_(lat_idx, lon_idx)]
+                pn = ds["prob_norm" ].values[i][np.ix_(lat_idx, lon_idx)]
+                pb = ds["prob_below"].values[i][np.ix_(lat_idx, lon_idx)]
+
+                la_grid, lo_grid = np.meshgrid(lat_sa, lon_sa, indexing="ij")
+                tmp = pd.DataFrame({
+                    "lat":        la_grid.flatten().round(1),
+                    "lon":        lo_grid.flatten().round(1),
+                    "prob_above": pa.flatten().round(4),
+                    "prob_norm":  pn.flatten().round(4),
+                    "prob_below": pb.flatten().round(4),
+                })
+                tmp["lead_month"]    = i
+                tmp["forecast_date"] = tdate.strftime("%Y-%m")
+                slices.append(tmp)
+
+            df = pd.concat(slices, ignore_index=True)
+            # Convert lon 0-360 → -180/180
+            df["lon"] = df["lon"].apply(lambda x: x - 360 if x > 180 else x)
+            df = df.dropna(subset=["prob_above"])
+            df["init_year"]  = int(init_ym[:4])
+            df["init_month"] = int(init_ym[4:])
+
+            df.to_csv(out_csv, index=False)
+            print(f"{out_stem}: {len(df)} rows ({df['forecast_date'].nunique()} leads) -> {out_csv}")
+
+        except Exception as e:
+            print(f"ERROR processing {nc_path}: {e}")
+
+
 if __name__ == "__main__":
     fetch_seas5_nino34()
     fetch_seas5_sa_maps()
+    fetch_nmme_probs()

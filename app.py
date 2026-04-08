@@ -526,6 +526,75 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
     return fig
 
 
+# IRI-style colorscale: brown (below-normal) → white (equal chances) → green (above-normal)
+_TERCILE_COLORSCALE = [
+    [0.00, "#7B3F00"], [0.15, "#C67A35"], [0.30, "#E8BC85"],
+    [0.42, "#F5EFE0"], [0.50, "#FFFFFF"], [0.58, "#D5EFC5"],
+    [0.70, "#5DB85B"], [0.85, "#2A7A2A"], [1.00, "#004D00"],
+]
+
+
+def make_nmme_prob_map(df, title):
+    """
+    IRI-style tercile probability map.
+    Signal = prob_above - prob_below, masked where neither exceeds 40%.
+    Brown → white → green  (below-normal → equal chances → above-normal).
+    """
+    # Build signal field: + where above-normal likely, - where below-normal likely
+    df = df.copy()
+    df["signal"] = df["prob_above"] - df["prob_below"]
+    # Mask where no category strongly dominates (< 40% threshold)
+    mask = (df["prob_above"] < 0.40) & (df["prob_below"] < 0.40)
+    df.loc[mask, "signal"] = np.nan
+
+    pivot = df.pivot_table(index="lat", columns="lon", values="signal")
+    lats  = pivot.index.values
+    lons  = pivot.columns.values
+    z     = pivot.values
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Contour(
+        x=lons, y=lats, z=z,
+        colorscale=_TERCILE_COLORSCALE,
+        zmin=-0.60, zmax=0.60,
+        contours_coloring="heatmap",
+        ncontours=18,
+        line=dict(width=0),
+        colorbar=dict(
+            tickvals=[-0.55, -0.40, 0, 0.40, 0.55],
+            ticktext=["Below ~55%", "Below 40%", "Equal chances", "Above 40%", "Above ~55%"],
+            thickness=14, len=0.80, outlinewidth=0,
+            title=dict(text="Tercile probability", side="right"),
+        ),
+        hovertemplate="Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>Signal: <b>%{z:.2f}</b><extra></extra>",
+        connectgaps=False,
+    ))
+
+    border_lons, border_lats = load_sa_borders()
+    if border_lons:
+        fig.add_trace(go.Scatter(
+            x=border_lons, y=border_lats,
+            mode="lines",
+            line=dict(color="rgba(80,80,80,0.9)", width=0.8),
+            hoverinfo="skip", showlegend=False,
+        ))
+
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
+        template="plotly_dark",
+        height=560,
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis=dict(range=[-92, -28], title="Longitude", showgrid=False,
+                   zeroline=False, constrain="domain"),
+        yaxis=dict(range=[-58, 16], title="Latitude", showgrid=False,
+                   zeroline=False, scaleanchor="x", scaleratio=1),
+        plot_bgcolor="rgba(30,34,50,1)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=3600)
@@ -555,6 +624,21 @@ def load_seas5_sa_maps():
                 else:
                     df["forecast_date"] = "unknown"
             result[key] = df
+        except Exception:
+            pass
+    return result if result else None
+
+
+@st.cache_data(ttl=3600)
+def load_nmme_probs():
+    """Load CPC NMME tercile probability forecasts for SA."""
+    result = {}
+    for key, fname in [("tmp2m", "nmme_tmp2m_probs_SA"),
+                       ("prate", "nmme_prate_probs_SA")]:
+        try:
+            df = pd.read_csv(f"{BASE_URL}/forecasts/{fname}.csv")
+            if len(df) > 100 and "prob_above" in df.columns:
+                result[key] = df
         except Exception:
             pass
     return result if result else None
@@ -854,59 +938,50 @@ with tab2:
 with tab3:
     st.subheader("Seasonal temperature and precipitation forecasts")
     st.markdown(
-        "ECMWF SEAS5 ensemble-mean forecasts for South America. "
-        "Select the forecast month to display."
+        "Tercile probability forecasts from the **CPC NMME** multi-model ensemble. "
+        "Colors show which category is most likely — "
+        "🟤 below-normal · ⬜ equal chances · 🟢 above-normal — "
+        "only where probability exceeds 40%."
     )
 
-    seas5_maps = load_seas5_sa_maps()
+    nmme = load_nmme_probs()
 
-    if seas5_maps:
-        # Build list of available forecast months from the data
-        ref_df = seas5_maps.get("t2m", seas5_maps.get("prcp"))
+    if nmme:
+        ref_df = nmme.get("tmp2m", nmme.get("prate"))
         row0   = ref_df.iloc[0]
         init_label = (f"Init: {int(row0['init_month']):02d}/{int(row0['init_year'])}"
-                      f"  |  Source: ECMWF SEAS5 via Copernicus C3S")
+                      f"  |  Source: CPC NMME multi-model ensemble"
+                      f"  |  Updated monthly")
 
-        # Sorted forecast months available (e.g. ["2026-05", "2026-06", "2026-07"])
         fc_dates = sorted(ref_df["forecast_date"].unique())
 
-        # Month selector
         sel_date = st.radio(
             "Forecast month",
             options=fc_dates,
             format_func=lambda d: pd.Timestamp(d + "-01").strftime("%B %Y"),
             horizontal=True,
         )
-        st.caption(init_label + "  |  Updated monthly")
+        st.caption(init_label)
 
         col_t, col_p = st.columns(2)
 
         with col_t:
-            if "t2m" in seas5_maps:
-                sub = seas5_maps["t2m"][seas5_maps["t2m"]["forecast_date"] == sel_date]
+            if "tmp2m" in nmme:
+                sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
+                month_str = pd.Timestamp(sel_date + "-01").strftime("%B %Y")
                 st.plotly_chart(
-                    make_seas5_geo_map(
-                        sub,
-                        title=f"T2m Anomaly — {pd.Timestamp(sel_date+'-01').strftime('%B %Y')} (°C)",
-                        colorscale="RdBu_r",
-                        cbar_title="Anomaly (°C)",
-                    ),
+                    make_nmme_prob_map(sub, f"Temperature — {month_str}"),
                     use_container_width=True,
                 )
             else:
                 st.warning("Temperature forecast not yet available.")
 
         with col_p:
-            if "prcp" in seas5_maps:
-                sub = seas5_maps["prcp"][seas5_maps["prcp"]["forecast_date"] == sel_date]
+            if "prate" in nmme:
+                sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
+                month_str = pd.Timestamp(sel_date + "-01").strftime("%B %Y")
                 st.plotly_chart(
-                    make_seas5_geo_map(
-                        sub,
-                        title=f"Precipitation — {pd.Timestamp(sel_date+'-01').strftime('%B %Y')} (mm/day)",
-                        colorscale="Blues",
-                        cbar_title="mm/day",
-                        diverging=False,
-                    ),
+                    make_nmme_prob_map(sub, f"Precipitation — {month_str}"),
                     use_container_width=True,
                 )
             else:
@@ -914,9 +989,8 @@ with tab3:
 
     else:
         st.info(
-            "Seasonal forecast maps will be available after the first automated data update "
-            "(runs daily via GitHub Actions). "
-            "The SEAS5 data is downloaded from Copernicus C3S."
+            "Forecast maps will be available after the next data update "
+            "(runs daily via GitHub Actions)."
         )
 
 
