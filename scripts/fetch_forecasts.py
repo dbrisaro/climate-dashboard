@@ -173,17 +173,22 @@ def fetch_seas5_nino34():
 def _extract_sa_grid(nc_path, init_year, init_month):
     """
     Load a downloaded SEAS5 NetCDF, subset to South America,
-    average over all lead months and any time/ensemble dims,
-    and return a flat DataFrame with columns: lat, lon, anom.
+    keep the lead-month dimension, and return a flat DataFrame with
+    columns: lat, lon, lead_month, forecast_date, anom.
     Longitudes are normalised to -180/180.
+    Any non-lat/lon/lead dims (time, member …) are averaged out.
     """
     ds  = xr.open_dataset(nc_path)
     var = list(ds.data_vars)[0]
     da  = ds[var]
 
     dims    = set(da.dims)
-    lat_dim = next(d for d in dims if d in ("latitude", "lat"))
-    lon_dim = next(d for d in dims if d in ("longitude", "lon"))
+    lat_dim  = next(d for d in dims if d in ("latitude", "lat"))
+    lon_dim  = next(d for d in dims if d in ("longitude", "lon"))
+    lead_dim = next(
+        (d for d in dims if d in ("forecastMonth", "leadtime_month", "step")),
+        None,
+    )
 
     # Subset SA bounding box (handle 0-360 and -180/180 conventions)
     lons = da[lon_dim].values
@@ -198,8 +203,11 @@ def _extract_sa_grid(nc_path, init_year, init_month):
             lon_dim: slice(SA_LON_W, SA_LON_E),
         })
 
-    # Average over all dims that are not lat/lon (leads, time, member …)
-    extra = [d for d in lon_sel.dims if d not in (lat_dim, lon_dim)]
+    # Average over dims that are not lat/lon/lead (time, member …)
+    keep = {lat_dim, lon_dim}
+    if lead_dim:
+        keep.add(lead_dim)
+    extra = [d for d in lon_sel.dims if d not in keep]
     spatial = lon_sel.mean(dim=extra) if extra else lon_sel
 
     df = (
@@ -214,7 +222,20 @@ def _extract_sa_grid(nc_path, init_year, init_month):
     if df["lon"].max() > 180:
         df["lon"] = df["lon"].apply(lambda x: x - 360 if x > 180 else x)
 
-    df = df[["lat", "lon", "anom"]].dropna(subset=["anom"])
+    # Add lead_month column (integer 1-6)
+    if lead_dim and lead_dim in df.columns:
+        df = df.rename(columns={lead_dim: "lead_month"})
+        df["lead_month"] = df["lead_month"].astype(int)
+    else:
+        df["lead_month"] = 1
+
+    # Compute forecast valid date from init + lead
+    df["forecast_date"] = df["lead_month"].apply(
+        lambda k: (pd.Timestamp(year=init_year, month=init_month, day=1)
+                   + pd.DateOffset(months=int(k))).strftime("%Y-%m")
+    )
+
+    df = df[["lat", "lon", "lead_month", "forecast_date", "anom"]].dropna(subset=["anom"])
     df["init_year"]  = init_year
     df["init_month"] = init_month
     return df

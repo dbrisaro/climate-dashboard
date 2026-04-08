@@ -777,30 +777,40 @@ with tab2:
 with tab3:
     st.subheader("Seasonal temperature and precipitation forecasts")
     st.markdown(
-        "ECMWF SEAS5 ensemble-mean anomaly forecasts for South America, "
-        "averaged over leads 1–3 (next 3 months). "
-        "Data downloaded daily from Copernicus C3S."
+        "ECMWF SEAS5 ensemble-mean forecasts for South America. "
+        "Select the forecast month to display."
     )
 
     seas5_maps = load_seas5_sa_maps()
 
     if seas5_maps:
-        init_info = ""
-        for key in ("t2m", "prcp"):
-            if key in seas5_maps:
-                row = seas5_maps[key].iloc[0]
-                init_info = f"Init: {int(row['init_month']):02d}/{int(row['init_year'])}  |  Leads 1–3"
-                break
-        st.caption(f"Source: ECMWF SEAS5 via Copernicus C3S  |  {init_info}  |  Updated monthly")
+        # Build list of available forecast months from the data
+        ref_df = seas5_maps.get("t2m", seas5_maps.get("prcp"))
+        row0   = ref_df.iloc[0]
+        init_label = (f"Init: {int(row0['init_month']):02d}/{int(row0['init_year'])}"
+                      f"  |  Source: ECMWF SEAS5 via Copernicus C3S")
+
+        # Sorted forecast months available (e.g. ["2026-05", "2026-06", "2026-07"])
+        fc_dates = sorted(ref_df["forecast_date"].unique())
+
+        # Month selector
+        sel_date = st.radio(
+            "Forecast month",
+            options=fc_dates,
+            format_func=lambda d: pd.Timestamp(d + "-01").strftime("%B %Y"),
+            horizontal=True,
+        )
+        st.caption(init_label + "  |  Updated monthly")
 
         col_t, col_p = st.columns(2)
 
         with col_t:
             if "t2m" in seas5_maps:
+                sub = seas5_maps["t2m"][seas5_maps["t2m"]["forecast_date"] == sel_date]
                 st.plotly_chart(
                     make_seas5_geo_map(
-                        seas5_maps["t2m"],
-                        title="2m Temperature Anomaly (°C)",
+                        sub,
+                        title=f"T2m Anomaly — {pd.Timestamp(sel_date+'-01').strftime('%B %Y')} (°C)",
                         colorscale="RdBu_r",
                         cbar_title="Anomaly (°C)",
                     ),
@@ -811,10 +821,11 @@ with tab3:
 
         with col_p:
             if "prcp" in seas5_maps:
+                sub = seas5_maps["prcp"][seas5_maps["prcp"]["forecast_date"] == sel_date]
                 st.plotly_chart(
                     make_seas5_geo_map(
-                        seas5_maps["prcp"],
-                        title="Precipitation Forecast (mm/day)",
+                        sub,
+                        title=f"Precipitation — {pd.Timestamp(sel_date+'-01').strftime('%B %Y')} (mm/day)",
                         colorscale="Blues",
                         cbar_title="mm/day",
                         diverging=False,
