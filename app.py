@@ -1,5 +1,7 @@
+import math
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import requests
 from bs4 import BeautifulSoup
@@ -129,6 +131,216 @@ def detect_enso_events(oni_df, threshold=0.5, min_months=5):
             i += 1
     return pd.DataFrame(events)
 
+
+# ── Forecast helpers ──────────────────────────────────────────────────────────
+
+def _norm_cdf(x):
+    """Standard normal CDF via math.erf (no scipy needed)."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+@st.cache_data(ttl=3600)
+def compute_damped_persistence(n_leads=7, r=0.85, sigma_clim=1.0):
+    """
+    Damped-persistence ENSO forecast - standard benchmark model.
+
+    Formula:
+        mean(k)  = ONI_0 * r^k
+        sigma(k) = sigma_clim * sqrt(1 - r^(2k))
+
+    With r ~ 0.85 /month and sigma_clim ~ 1.0 C this reproduces
+    the typical damped-persistence skill curve from the literature.
+    """
+    df = oni.sort_values("date").dropna(subset=["oni"])
+    oni_0     = float(df["oni"].iloc[-1])
+    last_date = df["date"].iloc[-1]
+
+    rows = []
+    for k in range(1, n_leads + 1):
+        mean_k  = oni_0 * (r ** k)
+        sigma_k = sigma_clim * math.sqrt(1.0 - r ** (2.0 * k))
+
+        p_nino    = (1.0 - _norm_cdf((0.5  - mean_k) / sigma_k)) * 100.0
+        p_nina    = _norm_cdf((-0.5 - mean_k) / sigma_k) * 100.0
+        p_neutral = 100.0 - p_nino - p_nina
+
+        fc_date = last_date + pd.DateOffset(months=k)
+        rows.append({
+            "date":      fc_date,
+            "lead":      k,
+            "mean":      round(mean_k,            3),
+            "low90":     round(mean_k - 1.645 * sigma_k, 3),
+            "high90":    round(mean_k + 1.645 * sigma_k, 3),
+            "low50":     round(mean_k - 0.675 * sigma_k, 3),
+            "high50":    round(mean_k + 0.675 * sigma_k, 3),
+            "p_nino":    round(p_nino,    1),
+            "p_nina":    round(p_nina,    1),
+            "p_neutral": round(p_neutral, 1),
+        })
+    return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=3600)
+def fetch_cpc_enso_probs():
+    """
+    Scrape the CPC ENSO seasonal probability forecast table.
+    Returns a DataFrame with columns: season, p_nino, p_neutral, p_nina
+    or None if the page cannot be parsed.
+    Source: https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/
+    """
+    try:
+        url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/"
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        rows_out = []
+        # CPC page has a table with columns like:
+        # Season | El Nino (%) | Neutral (%) | La Nina (%)
+        for table in soup.find_all("table"):
+            text = table.get_text(" ", strip=True).lower()
+            if "el ni" not in text and "la ni" not in text:
+                continue
+            trs = table.find_all("tr")
+            for tr in trs:
+                tds = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+                if len(tds) < 4:
+                    continue
+                # try to parse numeric probability triplet
+                nums = []
+                for cell in tds[1:4]:
+                    cleaned = cell.replace("%", "").replace("<", "").strip()
+                    try:
+                        nums.append(float(cleaned))
+                    except ValueError:
+                        break
+                if len(nums) == 3:
+                    rows_out.append({
+                        "season":    tds[0],
+                        "p_nino":    nums[0],
+                        "p_neutral": nums[1],
+                        "p_nina":    nums[2],
+                    })
+
+        if rows_out:
+            return pd.DataFrame(rows_out)
+        return None
+    except Exception:
+        return None
+
+
+def make_plume_chart(fc):
+    """Plotly figure with damped-persistence forecast plume."""
+    fig = go.Figure()
+
+    # 90% envelope
+    fig.add_trace(go.Scatter(
+        x=list(fc["date"]) + list(fc["date"][::-1]),
+        y=list(fc["high90"]) + list(fc["low90"][::-1]),
+        fill="toself",
+        fillcolor="rgba(239,85,59,0.12)",
+        line=dict(width=0),
+        name="90% range",
+        hoverinfo="skip",
+    ))
+    # 50% envelope
+    fig.add_trace(go.Scatter(
+        x=list(fc["date"]) + list(fc["date"][::-1]),
+        y=list(fc["high50"]) + list(fc["low50"][::-1]),
+        fill="toself",
+        fillcolor="rgba(239,85,59,0.25)",
+        line=dict(width=0),
+        name="50% range",
+        hoverinfo="skip",
+    ))
+    # Mean forecast
+    fig.add_trace(go.Scatter(
+        x=fc["date"], y=fc["mean"],
+        mode="lines+markers",
+        name="Forecast (damped persistence)",
+        line=dict(color="rgb(239,85,59)", width=2.5),
+        marker=dict(size=6),
+        hovertemplate="%{x|%b %Y}: %{y:+.2f} C<extra></extra>",
+    ))
+
+    # Recent ONI history (last 18 months) as context
+    hist = oni.sort_values("date").tail(18)
+    fig.add_trace(go.Scatter(
+        x=hist["date"], y=hist["oni"],
+        mode="lines",
+        name="ONI observed",
+        line=dict(color="white", width=1.5, dash="dot"),
+        hovertemplate="%{x|%b %Y}: %{y:+.2f} C<extra></extra>",
+    ))
+
+    fig.add_hline(y= 0.5, line_color="rgba(220,50,50,0.5)",  line_dash="dot", line_width=1)
+    fig.add_hline(y=-0.5, line_color="rgba(50,100,220,0.5)", line_dash="dot", line_width=1)
+    fig.add_hline(y= 0,   line_color="white", line_width=0.5, opacity=0.2)
+
+    fig.update_layout(
+        title="Nino 3.4 anomaly forecast - damped persistence",
+        yaxis_title="Anomaly (C)",
+        height=380,
+        template="plotly_dark",
+        margin=dict(l=10, r=10, t=40, b=10),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+    )
+    return fig
+
+
+def make_prob_chart(fc, cpc_probs=None):
+    """
+    Stacked bar chart: P(El Nino) / P(Neutral) / P(La Nina) per forecast month.
+    Uses CPC official probabilities if available, otherwise damped persistence.
+    """
+    if cpc_probs is not None and len(cpc_probs) >= 3:
+        df    = cpc_probs.copy()
+        title = "ENSO seasonal probability forecast (NOAA CPC)"
+        x_vals = df["season"].tolist()
+    else:
+        df    = fc.copy()
+        df["season"] = df["date"].dt.strftime("%b %Y")
+        title = "ENSO probability forecast (damped persistence)"
+        x_vals = df["season"].tolist()
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name="El Nino",
+        x=x_vals,
+        y=df["p_nino"],
+        marker_color="rgba(220,50,50,0.80)",
+        hovertemplate="%{x}<br>El Nino: %{y:.0f}%<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        name="Neutral",
+        x=x_vals,
+        y=df["p_neutral"],
+        marker_color="rgba(150,150,150,0.65)",
+        hovertemplate="%{x}<br>Neutral: %{y:.0f}%<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        name="La Nina",
+        x=x_vals,
+        y=df["p_nina"],
+        marker_color="rgba(50,100,220,0.80)",
+        hovertemplate="%{x}<br>La Nina: %{y:.0f}%<extra></extra>",
+    ))
+
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        yaxis_title="Probability (%)",
+        yaxis=dict(range=[0, 100]),
+        height=360,
+        template="plotly_dark",
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        hovermode="x unified",
+    )
+    return fig
+
+
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 st.title("Climate Indices - South America")
@@ -219,12 +431,59 @@ with tab1:
 with tab2:
     st.subheader("ENSO forecasts")
     st.markdown(
-        "Forecasts from IRI (International Research Institute for Climate and Society) "
-        "and NOAA CPC. Images are fetched directly from the source and updated monthly."
+        "Interactive forecast plume and ENSO probability charts, plus official "
+        "graphics from IRI and NOAA CPC. The plume uses a damped-persistence "
+        "model computed from the observed ONI record - the standard benchmark "
+        "in ENSO forecasting."
     )
 
-    # IRI figures
-    st.markdown("### IRI - ENSO forecast")
+    # ── Interactive forecast plume ────────────────────────────────────────────
+    st.markdown("### Forecast plume")
+
+    fc = compute_damped_persistence(n_leads=7)
+    st.plotly_chart(make_plume_chart(fc), use_container_width=True)
+
+    with st.expander("About the forecast method"):
+        st.markdown(
+            "**Damped persistence** uses the current ONI value as a starting point "
+            "and applies an exponential decay towards the climatological mean. "
+            "The decay rate r = 0.85/month and a background spread of "
+            "sigma = 1.0 C are consistent with published ENSO prediction skill. "
+            "The shaded envelopes show 50% and 90% uncertainty ranges assuming "
+            "a Gaussian error distribution."
+        )
+
+    st.divider()
+
+    # ── ENSO probability chart ────────────────────────────────────────────────
+    st.markdown("### ENSO state probabilities")
+
+    cpc_probs = fetch_cpc_enso_probs()
+    if cpc_probs is not None:
+        st.caption("Source: NOAA CPC official seasonal probability forecast.")
+    else:
+        st.caption(
+            "NOAA CPC probability table could not be loaded. "
+            "Showing probabilities derived from the damped-persistence forecast."
+        )
+
+    st.plotly_chart(make_prob_chart(fc, cpc_probs), use_container_width=True)
+
+    # Probability table
+    show_table = st.toggle("Show probability table", value=False)
+    if show_table:
+        if cpc_probs is not None:
+            st.dataframe(cpc_probs, hide_index=True, use_container_width=True)
+        else:
+            disp = fc[["date", "mean", "p_nino", "p_neutral", "p_nina"]].copy()
+            disp["date"] = disp["date"].dt.strftime("%b %Y")
+            disp.columns = ["Month", "Mean anomaly (C)", "P(El Nino) %", "P(Neutral) %", "P(La Nina) %"]
+            st.dataframe(disp, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # ── IRI figures ───────────────────────────────────────────────────────────
+    st.markdown("### IRI - ENSO forecast graphics")
     iri_figs = get_iri_figures()
 
     iri_labels = {
@@ -243,7 +502,7 @@ with tab2:
                 (v for k, v in iri_labels.items() if k in url),
                 "IRI forecast figure",
             )
-            with st.expander(label, expanded=(filtered.index(url) < 3)):
+            with st.expander(label, expanded=(filtered.index(url) < 2)):
                 st.image(url, width=700)
     else:
         st.warning("Could not load IRI figures. Visit the source directly.")
@@ -254,7 +513,7 @@ with tab2:
 
     st.divider()
 
-    # CPC
+    # ── CPC SST image ─────────────────────────────────────────────────────────
     st.markdown("### NOAA CPC - SST anomaly")
     cpc_sst_url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_update/sstweek_c.gif"
     try:
