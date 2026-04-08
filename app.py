@@ -527,25 +527,38 @@ def make_prob_chart(enso_probs=None, fc=None, clim=None):
 
 
 # IRI-style colorscale: brown (below-normal) → white (equal chances) → green (above-normal)
+# Non-significant areas (NaN) inherit plot_bgcolor = white
 _TERCILE_COLORSCALE = [
-    [0.00, "#7B3F00"], [0.15, "#C67A35"], [0.30, "#E8BC85"],
-    [0.42, "#F5EFE0"], [0.50, "#FFFFFF"], [0.58, "#D5EFC5"],
-    [0.70, "#5DB85B"], [0.85, "#2A7A2A"], [1.00, "#004D00"],
+    [0.00, "#6B2700"],  # dark brown   — below-normal ~80 %
+    [0.25, "#CC7722"],  # medium brown — below-normal ~55 %
+    [0.40, "#F0C080"],  # light brown  — below-normal ~40 %
+    [0.50, "#FFFFFF"],  # white center (NaN areas shown via plot_bgcolor)
+    [0.60, "#B8E0A0"],  # light green  — above-normal ~40 %
+    [0.75, "#4CAF50"],  # medium green — above-normal ~55 %
+    [1.00, "#1A5C1A"],  # dark green   — above-normal ~80 %
 ]
 
 
 def make_nmme_prob_map(df, title):
     """
     IRI-style tercile probability map.
-    Signal = prob_above - prob_below, masked where neither exceeds 40%.
-    Brown → white → green  (below-normal → equal chances → above-normal).
+
+    Signal:
+      +prob_above  where prob_above ≥ 40 % and is the dominant category (green)
+      -prob_below  where prob_below ≥ 40 % and is the dominant category (brown)
+      NaN          everywhere else  → shows as white (plot_bgcolor)
+
+    This reproduces the IRI seasonal forecast style exactly.
     """
-    # Build signal field: + where above-normal likely, - where below-normal likely
     df = df.copy()
-    df["signal"] = df["prob_above"] - df["prob_below"]
-    # Mask where no category strongly dominates (< 40% threshold)
-    mask = (df["prob_above"] < 0.40) & (df["prob_below"] < 0.40)
-    df.loc[mask, "signal"] = np.nan
+
+    # Dominant-probability signal (only where signal is meaningful)
+    above_wins = (df["prob_above"] >= 0.40) & (df["prob_above"] > df["prob_below"])
+    below_wins = (df["prob_below"] >= 0.40) & (df["prob_below"] > df["prob_above"])
+
+    df["signal"] = np.nan
+    df.loc[above_wins, "signal"] =  df.loc[above_wins, "prob_above"]
+    df.loc[below_wins, "signal"] = -df.loc[below_wins, "prob_below"]
 
     pivot = df.pivot_table(index="lat", columns="lon", values="signal")
     lats  = pivot.index.values
@@ -557,17 +570,22 @@ def make_nmme_prob_map(df, title):
     fig.add_trace(go.Contour(
         x=lons, y=lats, z=z,
         colorscale=_TERCILE_COLORSCALE,
-        zmin=-0.60, zmax=0.60,
+        zmin=-0.80, zmax=0.80,
         contours_coloring="heatmap",
-        ncontours=18,
+        ncontours=20,
         line=dict(width=0),
         colorbar=dict(
-            tickvals=[-0.55, -0.40, 0, 0.40, 0.55],
-            ticktext=["Below ~55%", "Below 40%", "Equal chances", "Above 40%", "Above ~55%"],
+            tickvals=[-0.70, -0.50, -0.40, 0.40, 0.50, 0.70],
+            ticktext=["Below 70%", "Below 50%", "Below 40%",
+                      "Above 40%", "Above 50%", "Above 70%"],
             thickness=14, len=0.80, outlinewidth=0,
-            title=dict(text="Tercile probability", side="right"),
+            title=dict(text="Probability", side="right"),
         ),
-        hovertemplate="Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>Signal: <b>%{z:.2f}</b><extra></extra>",
+        hovertemplate=(
+            "Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
+            "Signal: <b>%{z:+.0%}</b>  "
+            "(+ = above-normal, − = below-normal)<extra></extra>"
+        ),
         connectgaps=False,
     ))
 
@@ -576,20 +594,22 @@ def make_nmme_prob_map(df, title):
         fig.add_trace(go.Scatter(
             x=border_lons, y=border_lats,
             mode="lines",
-            line=dict(color="rgba(80,80,80,0.9)", width=0.8),
+            line=dict(color="rgba(60,60,60,0.85)", width=0.9),
             hoverinfo="skip", showlegend=False,
         ))
 
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center", font=dict(size=14)),
-        template="plotly_dark",
+        title=dict(text=title, x=0.5, xanchor="center",
+                   font=dict(size=14, color="#222")),
         height=560,
         margin=dict(l=10, r=10, t=40, b=10),
-        xaxis=dict(range=[-92, -28], title="Longitude", showgrid=False,
-                   zeroline=False, constrain="domain"),
-        yaxis=dict(range=[-58, 16], title="Latitude", showgrid=False,
-                   zeroline=False, scaleanchor="x", scaleratio=1),
-        plot_bgcolor="rgba(30,34,50,1)",
+        xaxis=dict(range=[-92, -28], title="", showgrid=False,
+                   zeroline=False, constrain="domain",
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        yaxis=dict(range=[-58, 16], title="", showgrid=False,
+                   zeroline=False, scaleanchor="x", scaleratio=1,
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        plot_bgcolor="white",          # NaN → white = "equal chances / no signal"
         paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
