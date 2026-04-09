@@ -794,7 +794,7 @@ st.title("Climate Oscillation Monitor")
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Current state",
     "ENSO forecasts",
-    "T & P forecasts",
+    "Seasonal forecasts",
     "ENSO history",
     "About",
 ])
@@ -1010,175 +1010,120 @@ because the ensemble models spread out and agree less on which tercile will be m
         """)
 
 
-    nmme = load_nmme_probs()
+    nmme  = load_nmme_probs()
+    seas5 = load_seas5_sa_maps()
 
-    if nmme:
-        ref_df = nmme.get("tmp2m", nmme.get("prate"))
-        row0   = ref_df.iloc[0]
-        init_label = (f"Init: {int(row0['init_month']):02d}/{int(row0['init_year'])}"
-                      f"  |  Source: CPC NMME multi-model ensemble"
-                      f"  |  Updated monthly")
-
-        fc_dates = sorted(ref_df["forecast_date"].unique())
-
-        def _seas_label(date_str):
-            """Convert 'YYYY-MM' to '3-month season' label.
-            Convention: the labeled month is the FIRST month of the 3-month season.
-            e.g. '2026-05' → 'MJJ 2026'  (May + Jun + Jul)
-            """
-            t = pd.Timestamp(date_str + "-01")
-            months = ["Jan","Feb","Mar","Apr","May","Jun",
-                      "Jul","Aug","Sep","Oct","Nov","Dec"]
-            m0 = t.month - 1          # 0-indexed
-            m1 = (m0 + 1) % 12
-            m2 = (m0 + 2) % 12
-            season = months[m0] + months[m1] + months[m2]
-            return f"{season} {t.year}"
-
-        sel_date = st.radio(
-            "Forecast season (3-month average, initialized "
-            f"{pd.Timestamp(str(int(row0['init_year']))+'-'+str(int(row0['init_month'])).zfill(2)+'-01').strftime('%B %Y')})",
-            options=fc_dates,
-            format_func=_seas_label,
-            horizontal=True,
-        )
-        st.caption(init_label)
-
-        st.info(
-            "**Why does the temperature map look almost entirely green (above-normal)?**  \n"
-            "The NMME terciles are computed relative to the **1991-2020 historical climatology**. "
-            "Since 2026 temperatures are consistently higher than that baseline due to long-term warming, "
-            "virtually all models forecast above-normal temperatures across most of South America "
-            "even at long lead times. This is a **real physical signal** (the global warming trend), "
-            "not a bug in the data. It means the interannual variability signal (e.g., from ENSO) "
-            "is largely masked by the systematic warm bias of the models relative to the reference period. "
-            "The SEAS5 anomaly maps below provide a complementary view in degrees C."
-        )
-
-        col_t, col_p = st.columns(2)
-        seas_str = _seas_label(sel_date)
-
-        with col_t:
-            if "tmp2m" in nmme:
-                sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
-                st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
-                st.caption(f"NMME temperature tercile probabilities - {seas_str}")
-            else:
-                st.warning("Temperature forecast not yet available.")
-
-        with col_p:
-            if "prate" in nmme:
-                sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
-                st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
-                st.caption(f"NMME precipitation tercile probabilities - {seas_str}")
-            else:
-                st.warning("Precipitation forecast not yet available.")
-
-    else:
+    if not nmme and not seas5:
         st.info(
             "Forecast maps will be available after the next data update "
             "(runs daily via GitHub Actions)."
         )
-
-    # ── SEAS5 anomaly maps ────────────────────────────────────────────────────
-    st.divider()
-    st.markdown("### ECMWF SEAS5 - Ensemble-mean anomaly maps")
-    st.markdown(
-        "Temperature anomaly (°C vs 1993–2016 climatology) and precipitation (mm/day) "
-        "from the **ECMWF SEAS5** ensemble mean, downloaded from the Copernicus Climate "
-        "Data Store (C3S). These maps show the **magnitude** of the expected anomaly, "
-        "complementing the NMME probability maps above. "
-        "Precipitation values are absolute (mm/day), not anomalies."
-    )
-
-    seas5 = load_seas5_sa_maps()
-    if seas5:
-        # Build season selector from t2m (or prcp if t2m missing)
-        ref_s = seas5.get("t2m", seas5.get("prcp"))
-        fc_dates_s5 = sorted(ref_s["forecast_date"].unique())
-
-        def _seas_label_s5(date_str):
-            """'YYYY-MM' → 'MJJ 2026' style label."""
+    else:
+        # ── Shared season label helper ────────────────────────────────────────
+        def _seas_label(date_str):
             t = pd.Timestamp(str(date_str) + "-01")
             months = ["Jan","Feb","Mar","Apr","May","Jun",
                       "Jul","Aug","Sep","Oct","Nov","Dec"]
             m0 = t.month - 1
-            season = months[m0] + months[(m0+1)%12] + months[(m0+2)%12]
-            return f"{season} {t.year}"
+            return months[m0] + months[(m0+1)%12] + months[(m0+2)%12] + f" {t.year}"
 
-        # Try to get init info from the dataframe
-        row_s5 = ref_s.iloc[0]
-        if "init_year" in row_s5 and "init_month" in row_s5:
-            s5_init_label = (
-                pd.Timestamp(
-                    year=int(row_s5["init_year"]),
-                    month=int(row_s5["init_month"]), day=1
-                ).strftime("%B %Y")
+        # ── Build union of available forecast dates ───────────────────────────
+        all_dates = set()
+        if nmme:
+            ref_nmme = nmme.get("tmp2m", nmme.get("prate"))
+            all_dates.update(ref_nmme["forecast_date"].unique())
+        if seas5:
+            ref_s5 = seas5.get("t2m", seas5.get("prcp"))
+            all_dates.update(ref_s5["forecast_date"].unique())
+        fc_dates = sorted(all_dates)
+
+        # ── Init month labels ─────────────────────────────────────────────────
+        captions = []
+        if nmme:
+            r = ref_nmme.iloc[0]
+            captions.append(
+                f"NMME init: {pd.Timestamp(year=int(r['init_year']), month=int(r['init_month']), day=1).strftime('%B %Y')}"
             )
-        else:
-            s5_init_label = "unknown"
+        if seas5:
+            r = ref_s5.iloc[0]
+            if "init_year" in r and "init_month" in r:
+                captions.append(
+                    f"SEAS5 init: {pd.Timestamp(year=int(r['init_year']), month=int(r['init_month']), day=1).strftime('%B %Y')}"
+                )
 
-        sel_date_s5 = st.radio(
-            f"Forecast season (SEAS5, initialized {s5_init_label})",
-            options=fc_dates_s5,
-            format_func=_seas_label_s5,
+        # ── Single selector ───────────────────────────────────────────────────
+        sel_date = st.radio(
+            "Forecast season",
+            options=fc_dates,
+            format_func=_seas_label,
             horizontal=True,
-            key="seas5_radio",
         )
+        st.caption("  |  ".join(captions))
+        seas_str = _seas_label(sel_date)
 
-        col_st, col_sp = st.columns(2)
-        seas_str_s5 = _seas_label_s5(sel_date_s5)
+        # ── Row 1: NMME probability maps ──────────────────────────────────────
+        if nmme:
+            st.markdown("#### CPC NMME - Tercile probabilities")
+            st.info(
+                "**Why is temperature almost entirely green (above-normal)?** "
+                "The NMME terciles are relative to the 1991-2020 climatology. "
+                "In 2026 the global warming trend pushes virtually all model forecasts "
+                "above that baseline - this is a real physical signal, not a bug. "
+                "The SEAS5 anomaly maps below show the magnitude in degrees C."
+            )
+            col_t, col_p = st.columns(2)
+            with col_t:
+                if "tmp2m" in nmme:
+                    sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
+                    if len(sub) > 0:
+                        st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                        st.caption(f"NMME temperature tercile probabilities - {seas_str}")
+                    else:
+                        st.info("Not available for this season.")
+            with col_p:
+                if "prate" in nmme:
+                    sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
+                    if len(sub) > 0:
+                        st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                        st.caption(f"NMME precipitation tercile probabilities - {seas_str}")
+                    else:
+                        st.info("Not available for this season.")
 
-        with col_st:
-            if "t2m" in seas5:
-                sub = seas5["t2m"][seas5["t2m"]["forecast_date"] == sel_date_s5]
-                if len(sub) > 0:
-                    st.plotly_chart(
-                        make_seas5_geo_map(
-                            sub,
-                            colorscale="RdBu_r",
-                            cbar_title="T2m anomaly (C)",
-                            step=0.5,
-                            diverging=True,
-                        ),
-                        use_container_width=True,
-                    )
-                    st.caption(f"SEAS5 temperature anomaly (C, vs 1993-2016) - {seas_str_s5}")
-                else:
-                    st.warning("No SEAS5 temperature data for this season.")
-            else:
-                st.warning("SEAS5 temperature data not available.")
-
-        with col_sp:
-            if "prcp" in seas5:
-                sub = seas5["prcp"][seas5["prcp"]["forecast_date"] == sel_date_s5]
-                if len(sub) > 0:
-                    st.plotly_chart(
-                        make_seas5_geo_map(
-                            sub,
-                            colorscale="YlGnBu",
-                            cbar_title="Precipitation (mm/day)",
-                            step=1.0,
-                            diverging=False,
-                        ),
-                        use_container_width=True,
-                    )
-                    st.caption(f"SEAS5 precipitation ensemble mean (mm/day) - {seas_str_s5}")
-                else:
-                    st.warning("No SEAS5 precipitation data for this season.")
-            else:
-                st.warning("SEAS5 precipitation data not available.")
-
-        st.caption(
-            "Source: ECMWF SEAS5 via Copernicus Climate Data Store (C3S)  |  "
-            "T2m anomaly reference: 1993-2016 (SEAS5 hindcast period)  |  "
-            "Precipitation: absolute ensemble mean (mm/day)"
-        )
-    else:
-        st.info(
-            "SEAS5 maps will be available after the next data update "
-            "(runs daily via GitHub Actions)."
-        )
+        # ── Row 2: SEAS5 anomaly maps ─────────────────────────────────────────
+        if seas5:
+            st.markdown("#### ECMWF SEAS5 - Ensemble-mean anomaly")
+            col_st, col_sp = st.columns(2)
+            with col_st:
+                if "t2m" in seas5:
+                    sub = seas5["t2m"][seas5["t2m"]["forecast_date"] == sel_date]
+                    if len(sub) > 0:
+                        st.plotly_chart(
+                            make_seas5_geo_map(sub, colorscale="RdBu_r",
+                                              cbar_title="T2m anomaly (C)",
+                                              step=0.5, diverging=True),
+                            use_container_width=True,
+                        )
+                        st.caption(f"SEAS5 temperature anomaly (C, vs 1993-2016) - {seas_str}")
+                    else:
+                        st.info("Not available for this season.")
+            with col_sp:
+                if "prcp" in seas5:
+                    sub = seas5["prcp"][seas5["prcp"]["forecast_date"] == sel_date]
+                    if len(sub) > 0:
+                        st.plotly_chart(
+                            make_seas5_geo_map(sub, colorscale="YlGnBu",
+                                              cbar_title="Precipitation (mm/day)",
+                                              step=1.0, diverging=False),
+                            use_container_width=True,
+                        )
+                        st.caption(f"SEAS5 precipitation ensemble mean (mm/day) - {seas_str}")
+                    else:
+                        st.info("Not available for this season.")
+            st.caption(
+                "Source: ECMWF SEAS5 via Copernicus Climate Data Store (C3S)  |  "
+                "T2m anomaly reference: 1993-2016  |  "
+                "Precipitation: absolute ensemble mean (mm/day)"
+            )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
