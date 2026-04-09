@@ -593,13 +593,15 @@ def make_nmme_prob_map(df):
         colorbar=dict(
             orientation="h",
             x=0.5, xanchor="center",
-            y=-0.12, yanchor="top",
+            y=-0.10, yanchor="top",
             tickvals=[-0.85, -0.75, -0.65, -0.55, -0.45,
                        0.45,  0.55,  0.65,  0.75,  0.85],
-            ticktext=["≥80%\nbelow", "≥70%", "≥60%", "≥50%", "≥40%",
-                      "≥40%\nabove", "≥50%", "≥60%", "≥70%", "≥80%"],
+            ticktext=["80%", "70%", "60%", "50%", "40%",
+                      "40%", "50%", "60%", "70%", "80%"],
             thickness=12, len=0.90, outlinewidth=0,
             tickfont=dict(size=8),
+            title=dict(text="below-normal                                above-normal",
+                       side="bottom", font=dict(size=8)),
         ),
         hovertemplate=(
             "Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
@@ -760,8 +762,8 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
         colorbar=dict(
             orientation="h",
             x=0.5, xanchor="center",
-            y=-0.12, yanchor="top",
-            title=dict(text=cbar_title, side="top"),
+            y=-0.10, yanchor="top",
+            title=dict(text=cbar_title, side="bottom", font=dict(size=8)),
             thickness=12, len=0.90, outlinewidth=0,
             tickfont=dict(size=8),
         ),
@@ -1232,46 +1234,66 @@ with tab4:
 # TAB 5 - ABOUT
 # ══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.subheader("About the indices")
+    st.subheader("Acerca de este dashboard")
+
     st.markdown("""
-**ONI - Oceanic Nino Index**
-3-month running mean of SST anomalies in the Nino 3.4 region (5N-5S, 170W-120W),
-relative to the 1991-2020 climatology. El Nino is declared when ONI exceeds +0.5 C
-for at least 5 consecutive overlapping seasons. Source: NOAA CPC.
+Este dashboard monitorea los principales modos de variabilidad climatica de gran escala
+que modulan el clima en America del Sur: temperatura, precipitacion y eventos extremos.
+Fue desarrollado por **Daniela Brisaro** como herramienta de seguimiento operativo
+para investigacion climatica.
 
-**Nino 3.4**
-Monthly SST anomaly averaged over the Nino 3.4 region. Similar to ONI but not smoothed.
-Source: NOAA CPC ERSSTv5.
-
-**Nino 1+2 - Coastal Nino**
-SST anomaly in the region closest to the South American coast (10S-0, 90W-80W).
-Most directly related to the coastal El Nino that affects Peru and Ecuador.
-Source: NOAA CPC ERSSTv5.
-
-**SOI - Southern Oscillation Index**
-Standardized difference in surface air pressure between Tahiti and Darwin, Australia.
-Negative SOI = El Nino conditions (low pressure over Tahiti, high over Darwin).
-Positive SOI = La Nina conditions. Source: NOAA CPC.
-
-**MEI - Multivariate ENSO Index v2**
-Combines sea level pressure, SST, surface winds, and outgoing longwave radiation
-over the tropical Pacific. Bimonthly. Source: NOAA PSL.
-
-**SAM - Southern Annular Mode**
-Also known as the Antarctic Oscillation (AAO). Measures the north-south shift of
-the westerly wind belt in the Southern Hemisphere. Positive phase: stronger
-westerlies at high latitudes, drier conditions over subtropical South America.
-Source: NOAA CPC.
-
-**IOD - Indian Ocean Dipole**
-Difference in SST anomalies between the western (50E-70E, 10S-10N) and eastern
-(90E-110E, 10S-0) tropical Indian Ocean. Positive events can modulate ENSO
-teleconnections over South America. Source: NOAA PSL / Hadley Centre.
-
----
-Data updated daily via GitHub Actions. Source code:
-[github.com/dbrisaro/climate-dashboard](https://github.com/dbrisaro/climate-dashboard)
+El objetivo es centralizar en un solo lugar los indices mas relevantes, actualizados
+automaticamente desde fuentes publicas, junto con pronosticos estacionales de temperatura
+y precipitacion para la region.
 """)
+
+    st.divider()
+
+    st.markdown("#### Fuentes de datos")
+    st.markdown("""
+| Variable | Fuente | Institucion | Actualizacion |
+|----------|--------|-------------|---------------|
+| ONI, Nino 3.4, Nino 1+2, SOI, SAM | [NOAA CPC](https://www.cpc.ncep.noaa.gov) | NOAA | Diaria |
+| MEI v2 | [NOAA PSL](https://psl.noaa.gov/enso/mei/) | NOAA | Mensual |
+| IOD | [NOAA PSL / Hadley Centre](https://psl.noaa.gov) | NOAA / Met Office | Mensual |
+| Pronostico ENSO (plume multimodelo) | [IRI Columbia](https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/) | IRI | Mensual |
+| Pronosticos estacionales NMME | [NOAA CPC](https://www.cpc.ncep.noaa.gov/products/NMME/) | NOAA | Mensual |
+| Pronosticos estacionales SEAS5 | [Copernicus C3S](https://climate.copernicus.eu) | ECMWF | Mensual |
+""")
+
+    st.divider()
+
+    st.markdown("#### Limitaciones")
+    st.markdown("""
+- **Habilidad de pronostico estacional**: los modelos tienen habilidad util hasta 3-4 meses de anticipacion en la mayor parte de America del Sur. A partir de ese umbral, la incertidumbre crece notablemente.
+- **Temperatura NMME**: los mapas de probabilidad de temperatura aparecen casi completamente en la categoria "por encima de lo normal" porque las terciles se calculan contra la climatologia 1991-2020. En 2026, el trend de calentamiento sistematicamente desplaza los pronosticos por encima de ese periodo de referencia. Esto es una senal real, no un error.
+- **Escala espacial**: este dashboard muestra senales de gran escala. No reemplaza pronosticos locales ni modelos de alta resolucion para eventos extremos especificos.
+- **Ensemble mean**: los mapas de SEAS5 muestran la media del ensamble, que tiende a suavizar los extremos. La incertidumbre entre miembros no esta representada.
+""")
+
+    st.divider()
+
+    st.markdown("#### Indices climaticos")
+    st.markdown("""
+**ONI - Oceanic Nino Index**: media movil de 3 meses de anomalias de TSM en la region Nino 3.4 (5N-5S, 170W-120W), relativa a la climatologia 1991-2020. Se declara El Nino cuando supera +0.5 C durante al menos 5 temporadas consecutivas. Fuente: NOAA CPC.
+
+**Nino 3.4**: anomalia mensual de TSM promediada en la region Nino 3.4. Similar al ONI pero sin suavizado. Fuente: NOAA CPC ERSSTv5.
+
+**Nino 1+2 - Nino Costero**: anomalia de TSM en la region mas cercana a la costa sudamericana (10S-0, 90W-80W). Fuente: NOAA CPC ERSSTv5.
+
+**SOI - Southern Oscillation Index**: diferencia estandarizada de presion superficial entre Tahiti y Darwin. SOI negativo = condiciones El Nino. SOI positivo = condiciones La Nina. Fuente: NOAA CPC.
+
+**MEI - Multivariate ENSO Index v2**: combina presion a nivel del mar, TSM, vientos superficiales y radiacion de onda larga saliente sobre el Pacifico tropical. Fuente: NOAA PSL.
+
+**SAM - Southern Annular Mode**: mide el desplazamiento norte-sur de los vientos del oeste en el Hemisferio Sur. Fase positiva: vientos mas fuertes en latitudes altas, condiciones mas secas en el sur de America del Sur. Fuente: NOAA CPC.
+
+**IOD - Indian Ocean Dipole**: diferencia de anomalias de TSM entre el Indico occidental y oriental. Los eventos positivos pueden modular las teleconexiones de ENSO sobre America del Sur. Fuente: NOAA PSL / Hadley Centre.
+""")
+
+    st.divider()
+    st.markdown(
+        "Codigo fuente: [github.com/dbrisaro/climate-dashboard](https://github.com/dbrisaro/climate-dashboard)"
+    )
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
