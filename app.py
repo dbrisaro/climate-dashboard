@@ -972,43 +972,7 @@ with tab2:
 # TAB 3 - T & P FORECASTS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.subheader("Seasonal temperature and precipitation forecasts")
-    st.markdown(
-        "This tab shows two complementary sources of seasonal forecasts over South America: "
-        "**CPC NMME** tercile probability maps and **ECMWF SEAS5** ensemble-mean anomaly maps."
-    )
-
-    st.markdown("### CPC NMME - Tercile probability maps")
-    st.markdown(
-        "Each map shows which tercile category is most likely for a **3-month overlapping season** "
-        "(e.g. MJJ = May+Jun+Jul average), initialized from the same month. "
-        "Colors show the dominant category: "
-        "**brown = below-normal · white = equal chances (no category >= 40%) · green = above-normal.**"
-    )
-
-    with st.expander("What is lead time?"):
-        st.markdown("""
-**Lead time** is how far in advance a forecast is issued relative to the period it is predicting.
-
-**Example** - if the forecast is initialized in **April 2026**:
-
-| Season | Months covered | Lead time | Interpretation |
-|--------|---------------|-----------|----------------|
-| MJJ | May + Jun + Jul | 1-3 months | Short lead - most reliable |
-| JJA | Jun + Jul + Aug | 2-4 months | Medium lead |
-| JAS | Jul + Aug + Sep | 3-5 months | Medium-long lead |
-| ASO | Aug + Sep + Oct | 4-6 months | Long lead - less reliable |
-
-**Why does lead time matter?**
-The atmosphere loses memory of its initial state over time, so forecast skill generally decreases with longer lead times.
-At short leads (1-2 months), the model still "remembers" current ocean and land conditions.
-At long leads (4-6 months), the signal comes almost entirely from slowly-evolving boundary forcings
-like sea surface temperatures (ENSO, for example) - everything else tends to average out.
-
-On the maps: **longer lead = more white area** (fewer grid points where any category exceeds the 40% threshold),
-because the ensemble models spread out and agree less on which tercile will be most likely.
-        """)
-
+    st.subheader("Seasonal forecasts - South America")
 
     nmme  = load_nmme_probs()
     seas5 = load_seas5_sa_maps()
@@ -1064,13 +1028,6 @@ because the ensemble models spread out and agree less on which tercile will be m
         # ── Row 1: NMME probability maps ──────────────────────────────────────
         if nmme:
             st.markdown("#### CPC NMME - Tercile probabilities")
-            st.info(
-                "**Why is temperature almost entirely green (above-normal)?** "
-                "The NMME terciles are relative to the 1991-2020 climatology. "
-                "In 2026 the global warming trend pushes virtually all model forecasts "
-                "above that baseline - this is a real physical signal, not a bug. "
-                "The SEAS5 anomaly maps below show the magnitude in degrees C."
-            )
             col_t, col_p = st.columns(2)
             with col_t:
                 if "tmp2m" in nmme:
@@ -1124,6 +1081,39 @@ because the ensemble models spread out and agree less on which tercile will be m
                 "T2m anomaly reference: 1993-2016  |  "
                 "Precipitation: absolute ensemble mean (mm/day)"
             )
+
+        # ── Notes (below maps) ────────────────────────────────────────────────
+        st.divider()
+        with st.expander("About these forecasts"):
+            st.markdown(
+                "**CPC NMME** shows tercile probabilities: which third of the historical "
+                "distribution (below-normal / near-normal / above-normal) is most likely, "
+                "based on the multi-model ensemble mean. Colors appear only where one category "
+                "reaches at least 40%. White = no clear signal.\n\n"
+                "**ECMWF SEAS5** shows the ensemble-mean anomaly in physical units "
+                "(degrees C for temperature, mm/day for precipitation).\n\n"
+                "**Why is NMME temperature almost entirely green?** The terciles are computed "
+                "relative to the 1991-2020 climatology. In 2026 the global warming trend "
+                "pushes virtually all forecasts above that baseline - this is a real physical "
+                "signal, not a bug. The SEAS5 maps above show the actual magnitude."
+            )
+        with st.expander("What is lead time?"):
+            st.markdown("""
+**Lead time** is how far in advance a forecast is issued relative to the period it is predicting.
+
+**Example** - if the forecast is initialized in **April 2026**:
+
+| Season | Months covered | Lead time | Notes |
+|--------|---------------|-----------|-------|
+| MJJ | May + Jun + Jul | 1-3 months | Most reliable |
+| JJA | Jun + Jul + Aug | 2-4 months | |
+| JAS | Jul + Aug + Sep | 3-5 months | |
+| ASO | Aug + Sep + Oct | 4-6 months | Less reliable |
+
+Forecast skill decreases with lead time because the atmosphere loses memory of its initial state.
+At long leads the signal comes mainly from slowly-evolving boundary conditions like sea surface
+temperatures (ENSO). On the NMME maps, longer lead generally means more white area.
+            """)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
