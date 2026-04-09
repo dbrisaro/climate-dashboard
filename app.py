@@ -1026,7 +1026,6 @@ with tab3:
             format_func=_seas_label,
             horizontal=True,
         )
-        st.caption("  |  ".join(captions))
         seas_str = _seas_label(sel_date)
 
         # ── 4 maps in a single row ────────────────────────────────────────────
@@ -1075,7 +1074,7 @@ with tab3:
                 else:
                     st.info("Not available.")
 
-        st.caption(
+        st.caption("  |  ".join(captions) + "  |  " +
             "NMME: CPC multi-model ensemble, tercile probabilities, ref 1991-2020  |  "
             "SEAS5: ECMWF ensemble mean via C3S, T2m anomaly ref 1993-2016"
         )
