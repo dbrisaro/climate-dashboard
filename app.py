@@ -617,7 +617,7 @@ def make_nmme_prob_map(df):
         ))
 
     fig.update_layout(
-        height=520,
+        height=400,
         margin=dict(l=10, r=10, t=10, b=10),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
@@ -775,7 +775,7 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
         ))
 
     fig.update_layout(
-        height=520,
+        height=400,
         margin=dict(l=10, r=10, t=10, b=10),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
@@ -986,10 +986,9 @@ with tab3:
         # ── Shared season label helper ────────────────────────────────────────
         def _seas_label(date_str):
             t = pd.Timestamp(str(date_str) + "-01")
-            months = ["Jan","Feb","Mar","Apr","May","Jun",
-                      "Jul","Aug","Sep","Oct","Nov","Dec"]
+            initials = ["J","F","M","A","M","J","J","A","S","O","N","D"]
             m0 = t.month - 1
-            return months[m0] + months[(m0+1)%12] + months[(m0+2)%12] + f" {t.year}"
+            return initials[m0] + initials[(m0+1)%12] + initials[(m0+2)%12] + f" {t.year}"
 
         # ── Build union of available forecast dates ───────────────────────────
         all_dates = set()
