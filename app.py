@@ -1055,7 +1055,7 @@ with tab3:
                     st.plotly_chart(
                         make_seas5_geo_map(sub, colorscale="RdBu_r",
                                           cbar_title="T2m anomaly (C)",
-                                          step=0.5, diverging=True),
+                                          step=0.1, diverging=True),
                         use_container_width=True,
                     )
                     st.caption(f"SEAS5 temperature anomaly (C) - {seas_str}")
