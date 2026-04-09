@@ -1024,62 +1024,56 @@ with tab3:
         st.caption("  |  ".join(captions))
         seas_str = _seas_label(sel_date)
 
-        # ── Row 1: NMME probability maps ──────────────────────────────────────
-        if nmme:
-            st.markdown("#### CPC NMME - Tercile probabilities")
-            col_t, col_p = st.columns(2)
-            with col_t:
-                if "tmp2m" in nmme:
-                    sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
-                    if len(sub) > 0:
-                        st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
-                        st.caption(f"NMME temperature tercile probabilities - {seas_str}")
-                    else:
-                        st.info("Not available for this season.")
-            with col_p:
-                if "prate" in nmme:
-                    sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
-                    if len(sub) > 0:
-                        st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
-                        st.caption(f"NMME precipitation tercile probabilities - {seas_str}")
-                    else:
-                        st.info("Not available for this season.")
+        # ── 4 maps in a single row ────────────────────────────────────────────
+        c1, c2, c3, c4 = st.columns(4)
 
-        # ── Row 2: SEAS5 anomaly maps ─────────────────────────────────────────
-        if seas5:
-            st.markdown("#### ECMWF SEAS5 - Ensemble-mean anomaly")
-            col_st, col_sp = st.columns(2)
-            with col_st:
-                if "t2m" in seas5:
-                    sub = seas5["t2m"][seas5["t2m"]["forecast_date"] == sel_date]
-                    if len(sub) > 0:
-                        st.plotly_chart(
-                            make_seas5_geo_map(sub, colorscale="RdBu_r",
-                                              cbar_title="T2m anomaly (C)",
-                                              step=0.5, diverging=True),
-                            use_container_width=True,
-                        )
-                        st.caption(f"SEAS5 temperature anomaly (C, vs 1993-2016) - {seas_str}")
-                    else:
-                        st.info("Not available for this season.")
-            with col_sp:
-                if "prcp" in seas5:
-                    sub = seas5["prcp"][seas5["prcp"]["forecast_date"] == sel_date]
-                    if len(sub) > 0:
-                        st.plotly_chart(
-                            make_seas5_geo_map(sub, colorscale="YlGnBu",
-                                              cbar_title="Precipitation (mm/day)",
-                                              step=1.0, diverging=False),
-                            use_container_width=True,
-                        )
-                        st.caption(f"SEAS5 precipitation ensemble mean (mm/day) - {seas_str}")
-                    else:
-                        st.info("Not available for this season.")
-            st.caption(
-                "Source: ECMWF SEAS5 via Copernicus Climate Data Store (C3S)  |  "
-                "T2m anomaly reference: 1993-2016  |  "
-                "Precipitation: absolute ensemble mean (mm/day)"
-            )
+        with c1:
+            if nmme and "tmp2m" in nmme:
+                sub = nmme["tmp2m"][nmme["tmp2m"]["forecast_date"] == sel_date]
+                if len(sub) > 0:
+                    st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                    st.caption(f"NMME temperature - {seas_str}")
+                else:
+                    st.info("Not available.")
+        with c2:
+            if nmme and "prate" in nmme:
+                sub = nmme["prate"][nmme["prate"]["forecast_date"] == sel_date]
+                if len(sub) > 0:
+                    st.plotly_chart(make_nmme_prob_map(sub), use_container_width=True)
+                    st.caption(f"NMME precipitation - {seas_str}")
+                else:
+                    st.info("Not available.")
+        with c3:
+            if seas5 and "t2m" in seas5:
+                sub = seas5["t2m"][seas5["t2m"]["forecast_date"] == sel_date]
+                if len(sub) > 0:
+                    st.plotly_chart(
+                        make_seas5_geo_map(sub, colorscale="RdBu_r",
+                                          cbar_title="T2m anomaly (C)",
+                                          step=0.5, diverging=True),
+                        use_container_width=True,
+                    )
+                    st.caption(f"SEAS5 temperature anomaly (C) - {seas_str}")
+                else:
+                    st.info("Not available.")
+        with c4:
+            if seas5 and "prcp" in seas5:
+                sub = seas5["prcp"][seas5["prcp"]["forecast_date"] == sel_date]
+                if len(sub) > 0:
+                    st.plotly_chart(
+                        make_seas5_geo_map(sub, colorscale="YlGnBu",
+                                          cbar_title="Precipitation (mm/day)",
+                                          step=1.0, diverging=False),
+                        use_container_width=True,
+                    )
+                    st.caption(f"SEAS5 precipitation (mm/day) - {seas_str}")
+                else:
+                    st.info("Not available.")
+
+        st.caption(
+            "NMME: CPC multi-model ensemble, tercile probabilities, ref 1991-2020  |  "
+            "SEAS5: ECMWF ensemble mean via C3S, T2m anomaly ref 1993-2016"
+        )
 
         # ── Notes (below maps) ────────────────────────────────────────────────
         st.divider()
