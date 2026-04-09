@@ -591,13 +591,15 @@ def make_nmme_prob_map(df):
         contours_coloring="fill",   # discrete steps
         line=dict(width=0.4, color="rgba(180,180,180,0.3)"),
         colorbar=dict(
+            orientation="h",
+            x=0.5, xanchor="center",
+            y=-0.12, yanchor="top",
             tickvals=[-0.85, -0.75, -0.65, -0.55, -0.45,
                        0.45,  0.55,  0.65,  0.75,  0.85],
-            ticktext=["≥80% below", "≥70%", "≥60%", "≥50%", "≥40%",
-                      "≥40% above", "≥50%", "≥60%", "≥70%", "≥80%"],
-            thickness=16, len=0.70, outlinewidth=0,
-            title=dict(text="Probability", side="right"),
-            tickfont=dict(size=10),
+            ticktext=["≥80%\nbelow", "≥70%", "≥60%", "≥50%", "≥40%",
+                      "≥40%\nabove", "≥50%", "≥60%", "≥70%", "≥80%"],
+            thickness=12, len=0.90, outlinewidth=0,
+            tickfont=dict(size=8),
         ),
         hovertemplate=(
             "Lon: %{x:.1f}°  Lat: %{y:.1f}°<br>"
@@ -617,8 +619,8 @@ def make_nmme_prob_map(df):
         ))
 
     fig.update_layout(
-        height=400,
-        margin=dict(l=10, r=10, t=10, b=10),
+        height=460,
+        margin=dict(l=10, r=10, t=10, b=70),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
                    tickfont=dict(color="#555"), tickcolor="#aaa"),
@@ -756,9 +758,12 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
         contours_coloring="fill",
         line=dict(width=0.3, color="rgba(180,180,180,0.2)"),
         colorbar=dict(
-            title=dict(text=cbar_title, side="right"),
-            thickness=14, len=0.80, outlinewidth=0,
-            tickfont=dict(size=10),
+            orientation="h",
+            x=0.5, xanchor="center",
+            y=-0.12, yanchor="top",
+            title=dict(text=cbar_title, side="top"),
+            thickness=12, len=0.90, outlinewidth=0,
+            tickfont=dict(size=8),
         ),
         hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>"
                       + cbar_title + ": <b>%{z:.2f}</b><extra></extra>",
@@ -775,8 +780,8 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
         ))
 
     fig.update_layout(
-        height=400,
-        margin=dict(l=10, r=10, t=10, b=10),
+        height=460,
+        margin=dict(l=10, r=10, t=10, b=70),
         xaxis=dict(range=[-92, -28], title="", showgrid=False,
                    zeroline=False, constrain="domain",
                    tickfont=dict(color="#555"), tickcolor="#aaa"),
