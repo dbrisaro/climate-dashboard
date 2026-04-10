@@ -841,16 +841,21 @@ with tab1:
 
     atl = load_atlantic_indices()
 
-    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-    c1.metric("ONI",                 f"{oni_val:+.2f} C",    enso_label(oni_val))
-    c2.metric("Nino 3.4",            f"{nino34_val:+.2f} C", enso_label(nino34_val))
-    c3.metric("Nino 1+2 (Coastal)",  f"{nino12_val:+.2f} C", enso_label(nino12_val))
-    c4.metric("MEI",                 f"{mei_val:+.2f}")
-    c5.metric("SOI",                 f"{soi_val:+.2f}")
-    c6.metric("SAM",                 f"{sam_val:+.2f}")
-    c7.metric("IOD",                 f"{iod_val:+.2f} C")
+    st.caption("ENSO and tropical Pacific")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("ONI",                f"{oni_val:+.2f} C",    enso_label(oni_val))
+    c2.metric("Nino 3.4",           f"{nino34_val:+.2f} C", enso_label(nino34_val))
+    c3.metric("Nino 1+2 (Coastal)", f"{nino12_val:+.2f} C", enso_label(nino12_val))
+    c4.metric("MEI",                f"{mei_val:+.2f}")
+    c5.metric("SOI",                f"{soi_val:+.2f}")
+
+    st.caption("Other oscillations")
+    cb1, cb2, cb3 = st.columns(3)
+    cb1.metric("SAM", f"{sam_val:+.2f}")
+    cb2.metric("IOD", f"{iod_val:+.2f} C")
 
     if atl:
+        st.caption("Atlantic and Pacific decadal")
         ca1, ca2, ca3, ca4 = st.columns(4)
         if "amo" in atl:
             ca1.metric("AMO", f"{latest(atl['amo'], 'amo'):+.2f} C")

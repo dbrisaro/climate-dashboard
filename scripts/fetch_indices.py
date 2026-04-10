@@ -320,9 +320,9 @@ def _fetch_psl_monthly(url, varname, missing=(-99.99, -9.99, -999.0)):
 def fetch_amo():
     """
     Atlantic Multidecadal Oscillation - unsmoothed monthly index.
-    Source: NOAA PSL  https://psl.noaa.gov/data/correlation/amo.data
+    Source: NOAA PSL  https://psl.noaa.gov/data/correlation/amon.us.long.data
     """
-    url = "https://psl.noaa.gov/data/correlation/amo.data"
+    url = "https://psl.noaa.gov/data/correlation/amon.us.long.data"
     df = _fetch_psl_monthly(url, "amo")
     out = DATA_DIR / "amo.csv"
     df.to_csv(out, index=False)
