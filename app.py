@@ -29,6 +29,19 @@ def load_all():
     return oni, mei, sam, iod, nino34, nino12, soi
 
 @st.cache_data(ttl=3600)
+def load_atlantic_indices():
+    """Load AMO, PDO, TNA, TSA from GitHub data."""
+    result = {}
+    for name in ("amo", "pdo", "tna", "tsa"):
+        try:
+            df = pd.read_csv(f"{BASE_URL}/{name}.csv", parse_dates=["date"])
+            if len(df) > 10:
+                result[name] = df
+        except Exception:
+            pass
+    return result
+
+@st.cache_data(ttl=3600)
 def load_enso_probs():
     """Load official ENSO seasonal probabilities scraped from IRI/CPC."""
     try:
@@ -826,6 +839,8 @@ with tab1:
     iod_val    = latest(iod,    "iod")
     soi_val    = latest(soi,    "soi")
 
+    atl = load_atlantic_indices()
+
     c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     c1.metric("ONI",                 f"{oni_val:+.2f} C",    enso_label(oni_val))
     c2.metric("Nino 3.4",            f"{nino34_val:+.2f} C", enso_label(nino34_val))
@@ -834,6 +849,17 @@ with tab1:
     c5.metric("SOI",                 f"{soi_val:+.2f}")
     c6.metric("SAM",                 f"{sam_val:+.2f}")
     c7.metric("IOD",                 f"{iod_val:+.2f} C")
+
+    if atl:
+        ca1, ca2, ca3, ca4 = st.columns(4)
+        if "amo" in atl:
+            ca1.metric("AMO", f"{latest(atl['amo'], 'amo'):+.2f} C")
+        if "pdo" in atl:
+            ca2.metric("PDO", f"{latest(atl['pdo'], 'pdo'):+.2f}")
+        if "tna" in atl:
+            ca3.metric("TNA", f"{latest(atl['tna'], 'tna'):+.2f} C")
+        if "tsa" in atl:
+            ca4.metric("TSA", f"{latest(atl['tsa'], 'tsa'):+.2f} C")
 
     st.divider()
     st.subheader("Historical time series")
@@ -887,6 +913,37 @@ with tab1:
             "IOD - Indian Ocean Dipole", "Anomaly (C)",
             "rgb(171,99,250)", y_start=y_start, y_end=y_end,
         ), use_container_width=True)
+
+    if atl:
+        st.divider()
+        st.subheader("Atlantic and Pacific decadal indices")
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            if "amo" in atl:
+                st.plotly_chart(make_ts(atl["amo"], "date", "amo",
+                    "AMO - Atlantic Multidecadal Oscillation", "Anomaly (C)",
+                    "rgb(255,100,100)", y_start=y_start, y_end=y_end,
+                ), use_container_width=True)
+        with col_a2:
+            if "pdo" in atl:
+                st.plotly_chart(make_ts(atl["pdo"], "date", "pdo",
+                    "PDO - Pacific Decadal Oscillation", "Index",
+                    "rgb(100,180,255)", y_start=y_start, y_end=y_end,
+                ), use_container_width=True)
+
+        col_a3, col_a4 = st.columns(2)
+        with col_a3:
+            if "tna" in atl:
+                st.plotly_chart(make_ts(atl["tna"], "date", "tna",
+                    "TNA - Tropical North Atlantic", "Anomaly (C)",
+                    "rgb(255,165,0)", y_start=y_start, y_end=y_end,
+                ), use_container_width=True)
+        with col_a4:
+            if "tsa" in atl:
+                st.plotly_chart(make_ts(atl["tsa"], "date", "tsa",
+                    "TSA - Tropical South Atlantic", "Anomaly (C)",
+                    "rgb(255,210,80)", y_start=y_start, y_end=y_end,
+                ), use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 - FORECASTS

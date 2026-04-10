@@ -275,11 +275,105 @@ def fetch_soi():
     return df
 
 
-# ── Atlantic Niño (ATL3) ──────────────────────────────────────────────────────
-# ATL3 = SST anomaly averaged over 3°S–3°N, 20°W–0°E.
-# No public pre-computed download is currently available without authentication
-# (PSL and KNMI sources return 404 or require login).
-# TODO: compute from NOAA ERSSTv5 NetCDF once xarray/netcdf4 are added to deps.
+# ── PSL monthly index helper ──────────────────────────────────────────────────
+
+def _fetch_psl_monthly(url, varname, missing=(-99.99, -9.99, -999.0)):
+    """
+    Parse NOAA PSL fixed-width monthly index files.
+    Format: first line = 'startYear endYear'
+            data lines = year  jan feb ... dec
+            trailing line starts with a negative sentinel value.
+    Returns a DataFrame with columns: year, month, date, <varname>
+    """
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+
+    rows = []
+    for line in resp.text.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        # skip header and sentinel lines
+        try:
+            year = int(parts[0])
+        except ValueError:
+            continue
+        if year < 1800 or year > 2100:
+            continue
+        for month in range(1, 13):
+            if month >= len(parts):
+                break
+            try:
+                val = float(parts[month])
+                if val not in missing and abs(val) < 900:
+                    rows.append({"year": year, "month": month, varname: val})
+            except ValueError:
+                pass
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
+    return df
+
+
+# ── AMO ───────────────────────────────────────────────────────────────────────
+
+def fetch_amo():
+    """
+    Atlantic Multidecadal Oscillation - unsmoothed monthly index.
+    Source: NOAA PSL  https://psl.noaa.gov/data/correlation/amo.data
+    """
+    url = "https://psl.noaa.gov/data/correlation/amo.data"
+    df = _fetch_psl_monthly(url, "amo")
+    out = DATA_DIR / "amo.csv"
+    df.to_csv(out, index=False)
+    print(f"AMO saved: {len(df)} rows -> {out}")
+    return df
+
+
+# ── PDO ───────────────────────────────────────────────────────────────────────
+
+def fetch_pdo():
+    """
+    Pacific Decadal Oscillation - monthly index from NOAA PSL.
+    Source: https://psl.noaa.gov/data/correlation/pdo.data
+    Same fixed-width format as AMO/TNA/TSA.
+    """
+    url = "https://psl.noaa.gov/data/correlation/pdo.data"
+    df = _fetch_psl_monthly(url, "pdo")
+    out = DATA_DIR / "pdo.csv"
+    df.to_csv(out, index=False)
+    print(f"PDO saved: {len(df)} rows -> {out}")
+    return df
+
+
+# ── TNA ───────────────────────────────────────────────────────────────────────
+
+def fetch_tna():
+    """
+    Tropical North Atlantic SST index.
+    Source: NOAA PSL  https://psl.noaa.gov/data/correlation/tna.data
+    """
+    url = "https://psl.noaa.gov/data/correlation/tna.data"
+    df = _fetch_psl_monthly(url, "tna")
+    out = DATA_DIR / "tna.csv"
+    df.to_csv(out, index=False)
+    print(f"TNA saved: {len(df)} rows -> {out}")
+    return df
+
+
+# ── TSA ───────────────────────────────────────────────────────────────────────
+
+def fetch_tsa():
+    """
+    Tropical South Atlantic SST index.
+    Source: NOAA PSL  https://psl.noaa.gov/data/correlation/tsa.data
+    """
+    url = "https://psl.noaa.gov/data/correlation/tsa.data"
+    df = _fetch_psl_monthly(url, "tsa")
+    out = DATA_DIR / "tsa.csv"
+    df.to_csv(out, index=False)
+    print(f"TSA saved: {len(df)} rows -> {out}")
+    return df
 
 
 # ── CPC/IRI ENSO seasonal probabilities ──────────────────────────────────────
@@ -411,5 +505,9 @@ if __name__ == "__main__":
     fetch_iod()
     fetch_nino34()
     fetch_soi()
+    fetch_amo()
+    fetch_pdo()
+    fetch_tna()
+    fetch_tsa()
     fetch_enso_probs()
     print("Done.")
