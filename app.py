@@ -1239,7 +1239,7 @@ with tab5:
     st.markdown("""
 Este dashboard monitorea los principales modos de variabilidad climatica de gran escala
 que modulan el clima en America del Sur: temperatura, precipitacion y eventos extremos.
-Fue desarrollado por **Daniela Brisaro** como herramienta de seguimiento operativo
+Fue desarrollado por **Daniela Belen Risaro** como herramienta de seguimiento operativo
 para investigacion climatica.
 
 El objetivo es centralizar en un solo lugar los indices mas relevantes, actualizados
