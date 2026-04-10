@@ -23,6 +23,9 @@ jobs:
       - name: Fetch indices
         run: python scripts/fetch_indices.py
 
+      - name: Fetch SST global maps
+        run: python scripts/fetch_sst.py
+
       - name: Fetch forecasts
         env:
           CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}

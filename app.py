@@ -29,6 +29,17 @@ def load_all():
     return oni, mei, sam, iod, nino34, nino12, soi
 
 @st.cache_data(ttl=3600)
+def load_sst_global():
+    """Load latest global SST and anomaly grid."""
+    try:
+        df = pd.read_csv(f"{BASE_URL}/sst_global_latest.csv")
+        if len(df) > 100 and {"lat","lon","sst","anom"}.issubset(df.columns):
+            return df
+    except Exception:
+        pass
+    return None
+
+@st.cache_data(ttl=3600)
 def load_atlantic_indices():
     """Load AMO, PDO, TNA, TSA from GitHub data."""
     result = {}
@@ -811,10 +822,11 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
 
 st.title("Climate Oscillation Monitor")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Current state",
     "ENSO forecasts",
     "Seasonal forecasts",
+    "Ocean state",
     "ENSO history",
     "About",
 ])
@@ -1178,9 +1190,78 @@ temperatures (ENSO). On the NMME maps, longer lead generally means more white ar
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 - ENSO HISTORY
+# TAB 4 - OCEAN STATE
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:
+    st.subheader("Ocean state - global SST")
+
+    sst_df = load_sst_global()
+
+    if sst_df is None:
+        st.info("SST data will be available after the next data update (runs daily).")
+    else:
+        date_label = sst_df["date"].iloc[0] if "date" in sst_df.columns else ""
+        st.caption(f"NOAA OISSTv2.1 monthly mean  |  {date_label}  |  Anomaly vs 1991-2020 climatology  |  ~2 degree resolution")
+
+        col_sst, col_anom = st.columns(2)
+
+        pivot_sst  = sst_df.pivot_table(index="lat", columns="lon", values="sst")
+        pivot_anom = sst_df.pivot_table(index="lat", columns="lon", values="anom")
+
+        def _global_map(pivot, colorscale, zmin, zmax, cbar_title, step):
+            lats = pivot.index.values
+            lons = pivot.columns.values
+            z    = pivot.values
+            fig  = go.Figure()
+            fig.add_trace(go.Contour(
+                x=lons, y=lats, z=z,
+                colorscale=colorscale,
+                zmin=zmin, zmax=zmax,
+                contours=dict(start=zmin, end=zmax, size=step),
+                contours_coloring="fill",
+                line=dict(width=0),
+                colorbar=dict(
+                    orientation="h",
+                    x=0.5, xanchor="center",
+                    y=-0.12, yanchor="top",
+                    title=dict(text=cbar_title, side="bottom", font=dict(size=9)),
+                    thickness=12, len=0.9, outlinewidth=0,
+                    tickfont=dict(size=8),
+                ),
+                connectgaps=False,
+                hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>" + cbar_title + ": <b>%{z:.1f}</b><extra></extra>",
+            ))
+            fig.update_layout(
+                height=420,
+                margin=dict(l=10, r=10, t=10, b=70),
+                xaxis=dict(range=[-180, 180], showgrid=False, zeroline=False,
+                           tickfont=dict(color="#555"), tickcolor="#aaa"),
+                yaxis=dict(range=[-90, 90], showgrid=False, zeroline=False,
+                           scaleanchor="x", scaleratio=1,
+                           tickfont=dict(color="#555"), tickcolor="#aaa"),
+                plot_bgcolor="#d0e8f0",
+                paper_bgcolor="rgba(0,0,0,0)",
+            )
+            return fig
+
+        with col_sst:
+            fig_sst = _global_map(pivot_sst, "thermal", -2, 32, "SST (C)", 1)
+            st.plotly_chart(fig_sst, use_container_width=True)
+            st.caption(f"Sea surface temperature (C) - {date_label}")
+
+        with col_anom:
+            vmax = max(abs(float(sst_df["anom"].quantile(0.02))),
+                       abs(float(sst_df["anom"].quantile(0.98))), 1.0)
+            vmax = round(math.ceil(vmax / 0.5) * 0.5, 1)
+            fig_anom = _global_map(pivot_anom, "RdBu_r", -vmax, vmax, "SST anomaly (C)", 0.5)
+            st.plotly_chart(fig_anom, use_container_width=True)
+            st.caption(f"SST anomaly vs 1991-2020 (C) - {date_label}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 5 - ENSO HISTORY
+# ══════════════════════════════════════════════════════════════════════════════
+with tab5:
     st.subheader("ENSO event history")
 
     events = detect_enso_events(oni)
@@ -1295,7 +1376,7 @@ with tab4:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 5 - ABOUT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab5:
+with tab6:
     st.subheader("Acerca de este dashboard")
 
     st.markdown("""
