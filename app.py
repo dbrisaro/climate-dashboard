@@ -64,6 +64,20 @@ def load_atlantic_indices():
     return result
 
 @st.cache_data(ttl=3600)
+def load_trend_data():
+    """Load precomputed trend CSVs from data/trends/."""
+    base = f"{BASE_URL}/trends"
+    result = {}
+    for name in ("sst_trend", "t2m_trend", "wind_trend", "ssh_trend"):
+        try:
+            df = pd.read_csv(f"{base}/{name}.csv")
+            if len(df) > 10 and {"lat", "lon", "trend"}.issubset(df.columns):
+                result[name] = df
+        except Exception:
+            pass
+    return result
+
+@st.cache_data(ttl=3600)
 def load_enso_probs():
     """Load official ENSO seasonal probabilities scraped from IRI/CPC."""
     try:
@@ -833,11 +847,80 @@ def make_seas5_geo_map(df, colorscale, cbar_title, step, vrange=None, diverging=
 
 st.title("Climate Oscillation Monitor")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+# ── Shared map helper (used in Ocean state and Trends tabs) ───────────────────
+
+def _global_map(pivot, colorscale, zmin, zmax, cbar_title, step):
+    """
+    Build a global filled-contour map from a lat/lon pivot table.
+    Overlays Natural Earth 110m land polygons for clean coastlines.
+    """
+    lats = pivot.index.values
+    lons = pivot.columns.values
+    z    = pivot.values
+    fig  = go.Figure()
+    fig.add_trace(go.Contour(
+        x=lons, y=lats, z=z,
+        colorscale=colorscale,
+        zmin=zmin, zmax=zmax,
+        contours=dict(start=zmin, end=zmax, size=step),
+        contours_coloring="fill",
+        line=dict(width=0),
+        colorbar=dict(
+            orientation="h",
+            x=0.5, xanchor="center",
+            y=-0.12, yanchor="top",
+            title=dict(text=cbar_title, side="bottom", font=dict(size=9)),
+            thickness=12, len=0.9, outlinewidth=0,
+            tickfont=dict(size=8),
+        ),
+        connectgaps=False,
+        hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>" + cbar_title + ": <b>%{z:.2f}</b><extra></extra>",
+    ))
+    # Land polygon overlay for sharp vector coastlines
+    try:
+        ne = _load_ne_land()
+        xs, ys = [], []
+        for feat in ne["features"]:
+            geom = feat["geometry"]
+            if geom["type"] == "Polygon":
+                rings = [geom["coordinates"][0]]
+            else:  # MultiPolygon
+                rings = [poly[0] for poly in geom["coordinates"]]
+            for ring in rings:
+                arr = np.array(ring)
+                xs.extend(arr[:, 0].tolist() + [None])
+                ys.extend(arr[:, 1].tolist() + [None])
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys,
+            mode="lines",
+            fill="toself",
+            fillcolor="rgb(195,188,178)",
+            line=dict(color="rgb(90,85,80)", width=0.5),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+    except Exception:
+        pass
+    fig.update_layout(
+        height=420,
+        margin=dict(l=10, r=10, t=10, b=70),
+        xaxis=dict(range=[-180, 180], showgrid=False, zeroline=False,
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        yaxis=dict(range=[-90, 90], showgrid=False, zeroline=False,
+                   scaleanchor="x", scaleratio=1,
+                   tickfont=dict(color="#555"), tickcolor="#aaa"),
+        plot_bgcolor="#d0e8f0",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Current state",
     "ENSO forecasts",
     "Seasonal forecasts",
     "Ocean state",
+    "Trends",
     "ENSO history",
     "About",
 ])
@@ -1219,67 +1302,6 @@ with tab4:
         pivot_sst  = sst_df.pivot_table(index="lat", columns="lon", values="sst")
         pivot_anom = sst_df.pivot_table(index="lat", columns="lon", values="anom")
 
-        def _global_map(pivot, colorscale, zmin, zmax, cbar_title, step):
-            lats = pivot.index.values
-            lons = pivot.columns.values
-            z    = pivot.values
-            fig  = go.Figure()
-            fig.add_trace(go.Contour(
-                x=lons, y=lats, z=z,
-                colorscale=colorscale,
-                zmin=zmin, zmax=zmax,
-                contours=dict(start=zmin, end=zmax, size=step),
-                contours_coloring="fill",
-                line=dict(width=0),
-                colorbar=dict(
-                    orientation="h",
-                    x=0.5, xanchor="center",
-                    y=-0.12, yanchor="top",
-                    title=dict(text=cbar_title, side="bottom", font=dict(size=9)),
-                    thickness=12, len=0.9, outlinewidth=0,
-                    tickfont=dict(size=8),
-                ),
-                connectgaps=False,
-                hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>" + cbar_title + ": <b>%{z:.1f}</b><extra></extra>",
-            ))
-            # Land polygon overlay for sharp coastlines
-            try:
-                ne = _load_ne_land()
-                xs, ys = [], []
-                for feat in ne["features"]:
-                    geom = feat["geometry"]
-                    if geom["type"] == "Polygon":
-                        rings = [geom["coordinates"][0]]
-                    else:  # MultiPolygon
-                        rings = [poly[0] for poly in geom["coordinates"]]
-                    for ring in rings:
-                        arr = np.array(ring)
-                        xs.extend(arr[:, 0].tolist() + [None])
-                        ys.extend(arr[:, 1].tolist() + [None])
-                fig.add_trace(go.Scatter(
-                    x=xs, y=ys,
-                    mode="lines",
-                    fill="toself",
-                    fillcolor="rgb(195,188,178)",
-                    line=dict(color="rgb(90,85,80)", width=0.5),
-                    showlegend=False,
-                    hoverinfo="skip",
-                ))
-            except Exception:
-                pass
-            fig.update_layout(
-                height=420,
-                margin=dict(l=10, r=10, t=10, b=70),
-                xaxis=dict(range=[-180, 180], showgrid=False, zeroline=False,
-                           tickfont=dict(color="#555"), tickcolor="#aaa"),
-                yaxis=dict(range=[-90, 90], showgrid=False, zeroline=False,
-                           scaleanchor="x", scaleratio=1,
-                           tickfont=dict(color="#555"), tickcolor="#aaa"),
-                plot_bgcolor="#d0e8f0",
-                paper_bgcolor="rgba(0,0,0,0)",
-            )
-            return fig
-
         with col_sst:
             fig_sst = _global_map(pivot_sst, "thermal", -2, 32, "SST (C)", 1)
             st.plotly_chart(fig_sst, use_container_width=True)
@@ -1295,9 +1317,85 @@ with tab4:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 - ENSO HISTORY
+# TAB 5 - TRENDS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab5:
+    st.subheader("Climate trends")
+
+    _TREND_VARS = {
+        "sst_trend":  {
+            "label":     "SST",
+            "unit":      "C/decade",
+            "colorscale":"RdBu_r",
+            "step":      0.1,
+            "vmax":      0.6,
+            "period_default": "1982-present",
+            "source":    "NOAA OISSTv2.1",
+        },
+        "t2m_trend":  {
+            "label":     "T2m",
+            "unit":      "C/decade",
+            "colorscale":"RdBu_r",
+            "step":      0.1,
+            "vmax":      0.6,
+            "period_default": "1982-present",
+            "source":    "ERA5",
+        },
+        "wind_trend": {
+            "label":     "10m wind speed",
+            "unit":      "m/s/decade",
+            "colorscale":"RdBu_r",
+            "step":      0.05,
+            "vmax":      0.2,
+            "period_default": "1982-present",
+            "source":    "ERA5",
+        },
+        "ssh_trend":  {
+            "label":     "SSH",
+            "unit":      "cm/decade",
+            "colorscale":"RdBu_r",
+            "step":      0.5,
+            "vmax":      4.0,
+            "period_default": "1993-present",
+            "source":    "Satellite altimetry (CMEMS)",
+        },
+    }
+
+    trend_data = load_trend_data()
+
+    if not trend_data:
+        st.info("Trend data will be available after the first monthly update. "
+                "You can trigger it manually from the GitHub Actions tab.")
+    else:
+        # Two rows of two maps
+        row1 = st.columns(2)
+        row2 = st.columns(2)
+        panels = [row1[0], row1[1], row2[0], row2[1]]
+
+        for panel, (key, meta) in zip(panels, _TREND_VARS.items()):
+            with panel:
+                if key not in trend_data:
+                    st.info(f"{meta['label']} trend not yet available.")
+                    continue
+
+                df      = trend_data[key]
+                period  = df["period"].iloc[0] if "period" in df.columns else meta["period_default"]
+                vmax    = max(abs(float(df["trend"].quantile(0.02))),
+                              abs(float(df["trend"].quantile(0.98))),
+                              meta["vmax"] * 0.5)
+                vmax    = round(math.ceil(vmax / meta["step"]) * meta["step"], 2)
+                pivot   = df.pivot_table(index="lat", columns="lon", values="trend")
+                cbar_title = f"{meta['unit']}"
+                fig     = _global_map(pivot, meta["colorscale"], -vmax, vmax, cbar_title, meta["step"])
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(f"{meta['label']} linear trend ({meta['unit']})  |  "
+                           f"{period}  |  {meta['source']}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 6 - ENSO HISTORY
+# ══════════════════════════════════════════════════════════════════════════════
+with tab6:
     st.subheader("ENSO event history")
 
     events = detect_enso_events(oni)
@@ -1410,9 +1508,9 @@ with tab5:
             st.plotly_chart(fig_cmp, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 - ABOUT
+# TAB 7 - ABOUT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab6:
+with tab7:
     st.subheader("Acerca de este dashboard")
 
     st.markdown("""

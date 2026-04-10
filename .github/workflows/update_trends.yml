@@ -1,0 +1,36 @@
+name: Update climate trends
+
+on:
+  schedule:
+    - cron: '0 8 1 * *'   # 1st of each month at 08:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  trends:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180   # ERA5 CDS queue can be slow
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compute trends
+        env:
+          CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+          CDSAPI_URL: https://cds.climate.copernicus.eu/api
+        run: python scripts/fetch_trends.py
+
+      - name: Commit trend CSVs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/trends/
+          git diff --cached --quiet || git commit -m "chore: update climate trends [skip ci]"
+          git push
