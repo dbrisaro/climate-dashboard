@@ -39,6 +39,17 @@ def load_sst_global():
         pass
     return None
 
+@st.cache_data(ttl=86400 * 30, show_spinner=False)
+def _load_ne_land():
+    """Fetch Natural Earth 110m land polygons (GeoJSON) for coastline overlay."""
+    url = (
+        "https://raw.githubusercontent.com/nvkelso/natural-earth-vector"
+        "/master/geojson/ne_110m_land.geojson"
+    )
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
 @st.cache_data(ttl=3600)
 def load_atlantic_indices():
     """Load AMO, PDO, TNA, TSA from GitHub data."""
@@ -1231,6 +1242,31 @@ with tab4:
                 connectgaps=False,
                 hovertemplate="Lon: %{x:.1f}  Lat: %{y:.1f}<br>" + cbar_title + ": <b>%{z:.1f}</b><extra></extra>",
             ))
+            # Land polygon overlay for sharp coastlines
+            try:
+                ne = _load_ne_land()
+                xs, ys = [], []
+                for feat in ne["features"]:
+                    geom = feat["geometry"]
+                    if geom["type"] == "Polygon":
+                        rings = [geom["coordinates"][0]]
+                    else:  # MultiPolygon
+                        rings = [poly[0] for poly in geom["coordinates"]]
+                    for ring in rings:
+                        arr = np.array(ring)
+                        xs.extend(arr[:, 0].tolist() + [None])
+                        ys.extend(arr[:, 1].tolist() + [None])
+                fig.add_trace(go.Scatter(
+                    x=xs, y=ys,
+                    mode="lines",
+                    fill="toself",
+                    fillcolor="rgb(195,188,178)",
+                    line=dict(color="rgb(90,85,80)", width=0.5),
+                    showlegend=False,
+                    hoverinfo="skip",
+                ))
+            except Exception:
+                pass
             fig.update_layout(
                 height=420,
                 margin=dict(l=10, r=10, t=10, b=70),
