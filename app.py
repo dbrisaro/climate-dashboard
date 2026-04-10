@@ -1252,8 +1252,8 @@ with tab4:
         with col_anom:
             vmax = max(abs(float(sst_df["anom"].quantile(0.02))),
                        abs(float(sst_df["anom"].quantile(0.98))), 1.0)
-            vmax = round(math.ceil(vmax / 0.5) * 0.5, 1)
-            fig_anom = _global_map(pivot_anom, "RdBu_r", -vmax, vmax, "SST anomaly (C)", 0.5)
+            vmax = round(math.ceil(vmax / 0.1) * 0.1, 1)
+            fig_anom = _global_map(pivot_anom, "RdBu_r", -vmax, vmax, "SST anomaly (C)", 0.1)
             st.plotly_chart(fig_anom, use_container_width=True)
             st.caption(f"SST anomaly vs 1991-2020 (C) - {date_label}")
 
