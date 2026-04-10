@@ -63,7 +63,7 @@ def load_atlantic_indices():
             pass
     return result
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=1800)
 def load_trend_data():
     """Load precomputed trend CSVs from data/trends/."""
     base = f"{BASE_URL}/trends"
