@@ -1083,6 +1083,27 @@ with tab2:
             "API: ensoforecast.iri.columbia.edu"
         )
         st.plotly_chart(make_iri_plume_chart(iri_plume, oni), use_container_width=True)
+
+        # Build wide-format CSV: one row per season, one column per model
+        seasons  = iri_plume.get("seasons", [])
+        rows = {s: {} for s in seasons}
+        for m in iri_plume.get("models", []):
+            name = m["model"]
+            for k, v in enumerate(m.get("data", [])):
+                if k < len(seasons) and v not in (-999, -999.0):
+                    rows[seasons[k]][name] = round(v, 3)
+        for key, label in [("dynamical", "DYN_AVG"), ("statistical", "STAT_AVG")]:
+            vals = iri_plume.get("averages", {}).get(key, [])
+            for k, v in enumerate(vals):
+                if k < len(seasons) and v not in (-999, -999.0, None):
+                    rows[seasons[k]][label] = round(v, 3)
+        plume_df = pd.DataFrame(rows).T.reset_index().rename(columns={"index": "season"})
+        st.download_button(
+            label="Download plume data (CSV)",
+            data=plume_df.to_csv(index=False),
+            file_name=f"iri_plume_{iri_plume['init_label'].replace(' ', '_')}.csv",
+            mime="text/csv",
+        )
     else:
         st.caption(
             "IRI API not available. Showing damped-persistence benchmark forecast."
