@@ -285,6 +285,25 @@ def enso_label(val):
     if val <= -0.5: return "Weak La Nina"
     return "Neutral"
 
+def _state_color(val, threshold=0.5, invert=False):
+    v = -val if invert else val
+    if v >=  threshold: return "#f97316"   # warm / positive
+    if v <= -threshold: return "#60a5fa"   # cool / negative
+    return "#6b7280"                        # neutral
+
+def _card_html(label, value, unit, state, color):
+    return (
+        f'<div style="background:#1a1e2e;border-top:3px solid {color};'
+        f'border-radius:10px;padding:14px 16px 12px;margin:2px 0;">'
+        f'<div style="color:#6b7280;font-size:11px;text-transform:uppercase;'
+        f'letter-spacing:.9px;font-weight:600;margin-bottom:6px;">{label}</div>'
+        f'<div style="color:#f1f5f9;font-size:26px;font-weight:700;line-height:1.1;">'
+        f'{value}<span style="font-size:13px;color:#6b7280;font-weight:400;'
+        f'margin-left:4px;">{unit}</span></div>'
+        f'<div style="color:{color};font-size:12px;font-weight:600;margin-top:5px;">'
+        f'{state}</div></div>'
+    )
+
 def filt(df, y_start, y_end):
     return df[(df["date"].dt.year >= y_start) & (df["date"].dt.year <= y_end)]
 
@@ -928,15 +947,16 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 - CURRENT STATE
 # ══════════════════════════════════════════════════════════════════════════════
-with tab1:
+def _group_header(text):
     st.markdown(
-        "Large-scale climate oscillations shape rainfall, temperature, and extreme "
-        "events across Latin America. This dashboard tracks the main indices, updated "
-        "daily from public sources (NOAA CPC / PSL)."
+        f'<p style="color:#6b7280;font-size:11px;text-transform:uppercase;'
+        f'letter-spacing:1px;font-weight:600;margin:18px 0 8px 0;'
+        f'padding-bottom:6px;border-bottom:1px solid #2d3748;">{text}</p>',
+        unsafe_allow_html=True,
     )
 
-    st.subheader("Current state")
 
+with tab1:
     oni_val    = latest(oni,    "oni")
     nino34_val = latest(nino34, "nino34")
     nino12_val = latest(nino12, "nino12")
@@ -944,33 +964,55 @@ with tab1:
     sam_val    = latest(sam,    "sam")
     iod_val    = latest(iod,    "iod")
     soi_val    = latest(soi,    "soi")
+    atl        = load_atlantic_indices()
 
-    atl = load_atlantic_indices()
+    last_date = oni["date"].dropna().iloc[-1].strftime("%B %Y")
+    st.caption(f"Last update: {last_date}  |  Source: NOAA CPC / PSL  |  Updated daily")
 
-    st.caption("ENSO and tropical Pacific")
+    _group_header("ENSO — Tropical Pacific")
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("ONI",                f"{oni_val:+.2f} C",    enso_label(oni_val))
-    c2.metric("Nino 3.4",           f"{nino34_val:+.2f} C", enso_label(nino34_val))
-    c3.metric("Nino 1+2 (Coastal)", f"{nino12_val:+.2f} C", enso_label(nino12_val))
-    c4.metric("MEI",                f"{mei_val:+.2f}")
-    c5.metric("SOI",                f"{soi_val:+.2f}")
+    c1.markdown(_card_html("ONI",       f"{oni_val:+.2f}",    "C",  enso_label(oni_val),    _state_color(oni_val)),    unsafe_allow_html=True)
+    c2.markdown(_card_html("Nino 3.4",  f"{nino34_val:+.2f}", "C",  enso_label(nino34_val), _state_color(nino34_val)), unsafe_allow_html=True)
+    c3.markdown(_card_html("Nino 1+2",  f"{nino12_val:+.2f}", "C",  enso_label(nino12_val), _state_color(nino12_val)), unsafe_allow_html=True)
+    c4.markdown(_card_html("MEI",       f"{mei_val:+.2f}",    "",
+        "El Nino signal" if mei_val > 0.5 else "La Nina signal" if mei_val < -0.5 else "Neutral",
+        _state_color(mei_val)), unsafe_allow_html=True)
+    c5.markdown(_card_html("SOI",       f"{soi_val:+.2f}",    "",
+        "La Nina signal" if soi_val > 0.5 else "El Nino signal" if soi_val < -0.5 else "Neutral",
+        _state_color(soi_val, invert=True)), unsafe_allow_html=True)
 
-    st.caption("Other oscillations")
-    cb1, cb2, cb3 = st.columns(3)
-    cb1.metric("SAM", f"{sam_val:+.2f}")
-    cb2.metric("IOD", f"{iod_val:+.2f} C")
+    _group_header("Other oscillations")
+    cb1, cb2, _, _, _ = st.columns(5)
+    cb1.markdown(_card_html("SAM", f"{sam_val:+.2f}", "",
+        "Positive" if sam_val > 0.5 else "Negative" if sam_val < -0.5 else "Neutral",
+        _state_color(sam_val)), unsafe_allow_html=True)
+    cb2.markdown(_card_html("IOD", f"{iod_val:+.2f}", "C",
+        "Positive IOD" if iod_val > 0.4 else "Negative IOD" if iod_val < -0.4 else "Neutral",
+        _state_color(iod_val, threshold=0.4)), unsafe_allow_html=True)
 
     if atl:
-        st.caption("Atlantic and Pacific decadal")
+        _group_header("Atlantic and Pacific decadal")
         ca1, ca2, ca3, ca4 = st.columns(4)
         if "amo" in atl:
-            ca1.metric("AMO", f"{latest(atl['amo'], 'amo'):+.2f} C")
+            v = latest(atl["amo"], "amo")
+            ca1.markdown(_card_html("AMO", f"{v:+.2f}", "C",
+                "Warm phase" if v > 0.2 else "Cool phase" if v < -0.2 else "Neutral",
+                _state_color(v, threshold=0.2)), unsafe_allow_html=True)
         if "pdo" in atl:
-            ca2.metric("PDO", f"{latest(atl['pdo'], 'pdo'):+.2f}")
+            v = latest(atl["pdo"], "pdo")
+            ca2.markdown(_card_html("PDO", f"{v:+.2f}", "",
+                "Positive" if v > 0.5 else "Negative" if v < -0.5 else "Neutral",
+                _state_color(v)), unsafe_allow_html=True)
         if "tna" in atl:
-            ca3.metric("TNA", f"{latest(atl['tna'], 'tna'):+.2f} C")
+            v = latest(atl["tna"], "tna")
+            ca3.markdown(_card_html("TNA", f"{v:+.2f}", "C",
+                "Warm" if v > 0.3 else "Cool" if v < -0.3 else "Neutral",
+                _state_color(v, threshold=0.3)), unsafe_allow_html=True)
         if "tsa" in atl:
-            ca4.metric("TSA", f"{latest(atl['tsa'], 'tsa'):+.2f} C")
+            v = latest(atl["tsa"], "tsa")
+            ca4.markdown(_card_html("TSA", f"{v:+.2f}", "C",
+                "Warm" if v > 0.3 else "Cool" if v < -0.3 else "Neutral",
+                _state_color(v, threshold=0.3)), unsafe_allow_html=True)
 
     st.divider()
     st.subheader("Historical time series")
