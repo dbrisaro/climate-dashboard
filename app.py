@@ -1024,6 +1024,32 @@ with tab1:
         value=(1990, year_max), step=1,
     )
 
+    with st.expander("Download index data (CSV)"):
+        _dl = [
+            ("ONI",       oni,        "oni"),
+            ("Nino 3.4",  nino34,     "nino34"),
+            ("Nino 1+2",  nino12,     "nino12"),
+            ("MEI",       mei,        "mei"),
+            ("SOI",       soi,        "soi"),
+            ("SAM",       sam,        "sam"),
+            ("IOD",       iod,        "iod"),
+        ]
+        if atl:
+            for key in ("amo", "pdo", "tna", "tsa"):
+                if key in atl:
+                    _dl.append((key.upper(), atl[key], key))
+
+        _cols = st.columns(4)
+        for i, (name, df, col) in enumerate(_dl):
+            csv = df[["date", col]].rename(columns={"date": "date", col: name}).to_csv(index=False)
+            _cols[i % 4].download_button(
+                label=name,
+                data=csv,
+                file_name=f"{col}.csv",
+                mime="text/csv",
+                key=f"dl_{col}",
+            )
+
     col1, col2 = st.columns(2)
     with col1:
         st.plotly_chart(make_ts(oni, "date", "oni",
