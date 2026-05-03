@@ -54,15 +54,61 @@ def get_cds_client():
     return cdsapi.Client(quiet=True)   # fall back to ~/.cdsapirc
 
 
+def _seas5_init_ym():
+    """
+    Return (year_str, month_str) for the latest available SEAS5 init month.
+    Tries current month first; falls back to previous months if CDS returns 400
+    (data not yet published — usually available around the 10th-15th of the month).
+    """
+    now = datetime.utcnow()
+    for delta in [0, -1, -2]:
+        candidate = now.replace(day=1) + pd.DateOffset(months=delta)
+        y = str(int(candidate.year))
+        m = f"{int(candidate.month):02d}"
+        # Check if we already have a cached file for this month
+        if (DATA_DIR / f"seas5_ssta_{y}{m}.nc").exists():
+            return y, m
+        # Probe CDS with a minimal request
+        try:
+            c = get_cds_client()
+            test_path = DATA_DIR / f"_probe_{y}{m}.nc"
+            c.retrieve(
+                "seasonal-postprocessed-single-levels",
+                {
+                    "originating_centre": "ecmwf",
+                    "system": "51",
+                    "variable": "sea_surface_temperature_anomaly",
+                    "product_type": "ensemble_mean",
+                    "year": y,
+                    "month": m,
+                    "leadtime_month": ["1"],
+                    "format": "netcdf",
+                },
+                str(test_path),
+            )
+            test_path.unlink(missing_ok=True)
+            return y, m
+        except Exception as e:
+            test_path = DATA_DIR / f"_probe_{y}{m}.nc"
+            test_path.unlink(missing_ok=True)
+            if "400" in str(e) or "Bad Request" in str(e):
+                print(f"SEAS5 {y}-{m} not yet available on CDS, trying previous month...")
+                continue
+            raise
+    raise RuntimeError("No SEAS5 init month available in last 3 months")
+
+
 def fetch_seas5_nino34():
     """
-    Download SEAS5 ensemble-mean SST anomaly for the current init month,
+    Download SEAS5 ensemble-mean SST anomaly for the latest available init month,
     extract Nino3.4 spatial mean, and save to:
       data/forecasts/nino34_seas5_mean.csv
     """
-    now   = datetime.utcnow()
-    year  = str(now.year)
-    month = f"{now.month:02d}"
+    try:
+        year, month = _seas5_init_ym()
+    except Exception as e:
+        print(f"WARNING: Could not determine SEAS5 init month: {e}")
+        return
 
     nc_path = DATA_DIR / f"seas5_ssta_{year}{month}.nc"
 
@@ -254,9 +300,11 @@ def fetch_seas5_sa_maps():
       data/forecasts/seas5_t2m_anom_SA.csv   — T2m anomaly (°C)
       data/forecasts/seas5_prcp_mmday_SA.csv — absolute precipitation (mm/day)
     """
-    now   = datetime.utcnow()
-    year  = str(now.year)
-    month = f"{now.month:02d}"
+    try:
+        year, month = _seas5_init_ym()
+    except Exception as e:
+        print(f"WARNING: Could not determine SEAS5 init month: {e}")
+        return
 
     c = get_cds_client()
 
