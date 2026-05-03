@@ -41,17 +41,18 @@ SA_LON_W, SA_LON_E = -90.0, -30.0
 def get_cds_client():
     key = os.environ.get("CDSAPI_KEY")
     url = os.environ.get("CDSAPI_URL", "https://cds.climate.copernicus.eu/api")
-    if key:
-        return cdsapi.Client(url=url, key=key, quiet=True)
-    # try Streamlit secrets (only available when running inside Streamlit)
-    try:
-        import streamlit as st
-        key = st.secrets["cds"]["key"]
-        url = st.secrets["cds"].get("url", url)
-        return cdsapi.Client(url=url, key=key, quiet=True)
-    except Exception:
-        pass
-    return cdsapi.Client(quiet=True)   # fall back to ~/.cdsapirc
+    if not key:
+        # try Streamlit secrets (only available when running inside Streamlit)
+        try:
+            import streamlit as st
+            key = st.secrets["cds"]["key"]
+            url = st.secrets["cds"].get("url", url)
+        except Exception:
+            pass
+    if not key:
+        # fall back to ~/.cdsapirc
+        return cdsapi.Client(quiet=True, retry_max=5)
+    return cdsapi.Client(url=url, key=key, quiet=True, retry_max=5)
 
 
 def _seas5_init_ym():
