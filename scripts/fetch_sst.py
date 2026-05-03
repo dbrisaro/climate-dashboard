@@ -24,10 +24,25 @@ FILL   = -9.96921e36
 
 # ── OPeNDAP ASCII helpers ─────────────────────────────────────────────────────
 
+def _opendap_get(url_suffix, timeout=60, retries=4, backoff=30):
+    """GET from PSL OPeNDAP with retry on 5xx / connection errors."""
+    import time
+    url = f"{BASE}/{url_suffix}"
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            if attempt == retries:
+                raise
+            print(f"  OPeNDAP error (attempt {attempt}/{retries}): {e} — retrying in {backoff}s")
+            time.sleep(backoff)
+
+
 def _get_1d(url_suffix):
     """Fetch a 1-D coordinate array from PSL OPeNDAP and return as np.array."""
-    r = requests.get(f"{BASE}/{url_suffix}", timeout=30)
-    r.raise_for_status()
+    r = _opendap_get(url_suffix, timeout=30)
     body = r.text.split("---------------------------------------------")[-1]
     values = re.sub(r"\[.*?\]", "", body)
     nums = []
@@ -46,7 +61,7 @@ def _get_2d_sst(url_suffix, nlat, nlon):
     Fetch a 2-D SST slice [1][nlat][nlon] and return as (nlat, nlon) np.array.
     Handles OPeNDAP line-wrapping. Missing fill value replaced with NaN.
     """
-    r = requests.get(f"{BASE}/{url_suffix}", timeout=60)
+    r = _opendap_get(url_suffix, timeout=60)
     r.raise_for_status()
     body = r.text.split("---------------------------------------------")[-1]
 
@@ -135,4 +150,9 @@ def fetch_sst_global():
 
 
 if __name__ == "__main__":
-    fetch_sst_global()
+    try:
+        fetch_sst_global()
+    except Exception as e:
+        print(f"WARNING: fetch_sst_global failed: {e}")
+        print("SST data not updated — will retry on next run.")
+        raise SystemExit(0)   # exit cleanly so the workflow continues
