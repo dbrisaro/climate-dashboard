@@ -8,7 +8,9 @@ on:
 jobs:
   trends:
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # ERA5 CDS queue can be slow
+    timeout-minutes: 180
+    permissions:
+      contents: write   # ERA5 CDS queue can be slow
 
     steps:
       - uses: actions/checkout@v4
