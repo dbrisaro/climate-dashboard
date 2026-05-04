@@ -304,6 +304,28 @@ def _card_html(label, value, unit, state, color):
         f'{state}</div></div>'
     )
 
+def _headline(oni_val, iod_val, atl):
+    parts = []
+    enso = enso_label(oni_val)
+    parts.append(enso if enso != "Neutral" else "Neutral ENSO")
+    if iod_val > 0.4:
+        parts.append("Positive IOD")
+    elif iod_val < -0.4:
+        parts.append("Negative IOD")
+    if atl and "amo" in atl:
+        v = latest(atl["amo"], "amo")
+        if v > 0.2:
+            parts.append("AMO warm phase")
+        elif v < -0.2:
+            parts.append("AMO cool phase")
+    if atl and "pdo" in atl:
+        v = latest(atl["pdo"], "pdo")
+        if v > 0.5:
+            parts.append("PDO positive")
+        elif v < -0.5:
+            parts.append("PDO negative")
+    return "  ·  ".join(parts)
+
 def filt(df, y_start, y_end):
     return df[(df["date"].dt.year >= y_start) & (df["date"].dt.year <= y_end)]
 
@@ -934,15 +956,7 @@ def _global_map(pivot, colorscale, zmin, zmax, cbar_title, step):
     return fig
 
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "Current state",
-    "ENSO forecasts",
-    "Seasonal forecasts",
-    "Ocean state",
-    "Trends",
-    "ENSO history",
-    "About",
-])
+tab1, tab2, tab3, tab4 = st.tabs(["Now", "Forecast", "Trends & History", "About"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 - CURRENT STATE
@@ -968,6 +982,12 @@ with tab1:
 
     last_date = oni["date"].dropna().iloc[-1].strftime("%B %Y")
     st.caption(f"Last update: {last_date}  |  Source: NOAA CPC / PSL  |  Updated daily")
+
+    headline = _headline(oni_val, iod_val, atl)
+    st.markdown(
+        f'<p style="color:#f1f5f9;font-size:18px;font-weight:600;margin:0 0 16px 0;">{headline}</p>',
+        unsafe_allow_html=True,
+    )
 
     _group_header("ENSO — Tropical Pacific")
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -1013,6 +1033,36 @@ with tab1:
             ca4.markdown(_card_html("TSA", f"{v:+.2f}", "C",
                 "Warm" if v > 0.3 else "Cool" if v < -0.3 else "Neutral",
                 _state_color(v, threshold=0.3)), unsafe_allow_html=True)
+
+    # ── Ocean state - global SST (formerly tab4) ──────────────────────────────
+    st.divider()
+    st.subheader("Ocean state - global SST")
+
+    sst_df = load_sst_global()
+
+    if sst_df is None:
+        st.info("SST data will be available after the next data update (runs daily).")
+    else:
+        date_label = sst_df["date"].iloc[0] if "date" in sst_df.columns else ""
+        st.caption(f"NOAA OISSTv2.1 monthly mean  |  {date_label}  |  Anomaly vs 1991-2020 climatology  |  ~2 degree resolution")
+
+        col_sst, col_anom = st.columns(2)
+
+        pivot_sst  = sst_df.pivot_table(index="lat", columns="lon", values="sst")
+        pivot_anom = sst_df.pivot_table(index="lat", columns="lon", values="anom")
+
+        with col_sst:
+            fig_sst = _global_map(pivot_sst, "thermal", -2, 32, "SST (C)", 1)
+            st.plotly_chart(fig_sst, use_container_width=True)
+            st.caption(f"Sea surface temperature (C) - {date_label}")
+
+        with col_anom:
+            vmax = max(abs(float(sst_df["anom"].quantile(0.02))),
+                       abs(float(sst_df["anom"].quantile(0.98))), 1.0)
+            vmax = round(math.ceil(vmax / 0.1) * 0.1, 1)
+            fig_anom = _global_map(pivot_anom, "RdBu_r", -vmax, vmax, "SST anomaly (C)", 0.1)
+            st.plotly_chart(fig_anom, use_container_width=True)
+            st.caption(f"SST anomaly vs 1991-2020 (C) - {date_label}")
 
     st.divider()
     st.subheader("Historical time series")
@@ -1125,7 +1175,7 @@ with tab1:
                 ), use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 - FORECASTS
+# TAB 2 - FORECAST (ENSO + Seasonal)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
     st.subheader("ENSO forecasts")
@@ -1232,10 +1282,8 @@ with tab2:
         "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/lanina/enso_evolution-status-fcsts-web.pdf",
     )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 - T & P FORECASTS
-# ══════════════════════════════════════════════════════════════════════════════
-with tab3:
+    # ── Seasonal forecasts - South America (formerly tab3) ───────────────────
+    st.divider()
     st.subheader("Seasonal forecasts - South America")
 
     nmme  = load_nmme_probs()
@@ -1373,42 +1421,9 @@ temperatures (ENSO). On the NMME maps, longer lead generally means more white ar
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 - OCEAN STATE
+# TAB 3 - TRENDS & HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
-with tab4:
-    st.subheader("Ocean state - global SST")
-
-    sst_df = load_sst_global()
-
-    if sst_df is None:
-        st.info("SST data will be available after the next data update (runs daily).")
-    else:
-        date_label = sst_df["date"].iloc[0] if "date" in sst_df.columns else ""
-        st.caption(f"NOAA OISSTv2.1 monthly mean  |  {date_label}  |  Anomaly vs 1991-2020 climatology  |  ~2 degree resolution")
-
-        col_sst, col_anom = st.columns(2)
-
-        pivot_sst  = sst_df.pivot_table(index="lat", columns="lon", values="sst")
-        pivot_anom = sst_df.pivot_table(index="lat", columns="lon", values="anom")
-
-        with col_sst:
-            fig_sst = _global_map(pivot_sst, "thermal", -2, 32, "SST (C)", 1)
-            st.plotly_chart(fig_sst, use_container_width=True)
-            st.caption(f"Sea surface temperature (C) - {date_label}")
-
-        with col_anom:
-            vmax = max(abs(float(sst_df["anom"].quantile(0.02))),
-                       abs(float(sst_df["anom"].quantile(0.98))), 1.0)
-            vmax = round(math.ceil(vmax / 0.1) * 0.1, 1)
-            fig_anom = _global_map(pivot_anom, "RdBu_r", -vmax, vmax, "SST anomaly (C)", 0.1)
-            st.plotly_chart(fig_anom, use_container_width=True)
-            st.caption(f"SST anomaly vs 1991-2020 (C) - {date_label}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 - TRENDS
-# ══════════════════════════════════════════════════════════════════════════════
-with tab5:
+with tab3:
     st.subheader("Climate trends")
 
     _TREND_VARS = {
@@ -1481,10 +1496,8 @@ with tab5:
                            f"{period}  |  {meta['source']}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 6 - ENSO HISTORY
-# ══════════════════════════════════════════════════════════════════════════════
-with tab6:
+    # ── ENSO event history (formerly tab6) ───────────────────────────────────
+    st.divider()
     st.subheader("ENSO event history")
 
     events = detect_enso_events(oni)
@@ -1597,9 +1610,9 @@ with tab6:
             st.plotly_chart(fig_cmp, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 7 - ABOUT
+# TAB 4 - ABOUT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab7:
+with tab4:
     st.subheader("Acerca de este dashboard")
 
     st.markdown("""
