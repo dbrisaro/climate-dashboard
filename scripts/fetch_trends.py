@@ -173,8 +173,8 @@ def _get_cds_client():
     key = os.environ.get("CDSAPI_KEY")
     url = os.environ.get("CDSAPI_URL", "https://cds.climate.copernicus.eu/api")
     if key:
-        return cdsapi.Client(url=url, key=key, quiet=True)
-    return cdsapi.Client(quiet=True)
+        return cdsapi.Client(url=url, key=key, quiet=True, retry_max=5)
+    return cdsapi.Client(quiet=True, retry_max=5)
 
 
 def _nc_to_trend_csv(nc_path, out_csv, derive_fn, period_str):
@@ -411,7 +411,21 @@ def compute_ssh_trend():
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    compute_sst_trend()
-    compute_era5_t2m_trend()
-    compute_era5_wind_trend()
-    compute_ssh_trend()
+    errors = []
+    for name, fn in [
+        ("SST trend",       compute_sst_trend),
+        ("T2m trend",       compute_era5_t2m_trend),
+        ("Wind trend",      compute_era5_wind_trend),
+        ("SSH trend",       compute_ssh_trend),
+    ]:
+        try:
+            fn()
+        except Exception as e:
+            print(f"WARNING: {name} failed: {e}")
+            print(f"  {name} not updated — will retry on next run.")
+            errors.append(name)
+
+    if errors:
+        print(f"\nCompleted with errors in: {', '.join(errors)}")
+    else:
+        print("\nAll trends computed successfully.")
