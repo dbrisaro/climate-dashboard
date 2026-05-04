@@ -956,7 +956,7 @@ def _global_map(pivot, colorscale, zmin, zmax, cbar_title, step):
     return fig
 
 
-tab1, tab2, tab3, tab4 = st.tabs(["Now", "Forecast", "Trends & History", "About"])
+tab1, tab2, tab3, tab4 = st.tabs(["Now", "Forecast", "Trends", "About"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 - CURRENT STATE
