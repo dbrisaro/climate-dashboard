@@ -12,6 +12,14 @@ st.set_page_config(
     layout="wide",
 )
 
+# Reduce default Streamlit top padding
+st.markdown("""
+<style>
+  .block-container { padding-top: 1.2rem; }
+  h1 { margin-bottom: 0.2rem; }
+</style>
+""", unsafe_allow_html=True)
+
 BASE_URL = "https://raw.githubusercontent.com/dbrisaro/climate-dashboard/main/data"
 
 # ── Data loading ──────────────────────────────────────────────────────────────
