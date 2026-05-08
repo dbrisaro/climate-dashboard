@@ -330,7 +330,7 @@ def compute_ssh_trend():
                     "variable": "monthly_mean",
                     "year":     [str(y) for y in range(1993, now.year + 1)],
                     "month":    [f"{m:02d}" for m in range(1, 13)],
-                    "format":   "zip",
+                    "version":  "vdt2024",
                 },
                 str(nc_path.with_suffix(".zip")),
             )
