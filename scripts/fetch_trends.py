@@ -311,67 +311,90 @@ def compute_era5_wind_trend():
 
 # ── SSH trend (satellite altimetry) ──────────────────────────────────────────
 
+def _download_ssh_year(c, year, zip_path):
+    """Download one year of monthly SSH SLA from CDS into zip_path."""
+    c.retrieve(
+        "satellite-sea-level-global",
+        {
+            "variable": "monthly_mean",
+            "year":     [str(year)],
+            "month":    [f"{m:02d}" for m in range(1, 13)],
+            "version":  "vdt2024",
+        },
+        str(zip_path),
+    )
+
+
 def compute_ssh_trend():
     out = DATA_DIR / "ssh_trend.csv"
     if out.exists() and (datetime.utcnow().timestamp() - out.stat().st_mtime) < 86400 * 25:
         print(f"SSH trend up to date, skipping -> {out}")
         return
 
-    now     = datetime.utcnow()
-    nc_path = DATA_DIR / f"ssh_monthly_1993_{now.year}.nc"
+    import zipfile
+    import xarray as xr
 
-    if not nc_path.exists():
-        print("Downloading satellite sea level anomaly 1993-present from CDS...")
-        try:
-            c = _get_cds_client()
-            c.retrieve(
-                "satellite-sea-level-global",
-                {
-                    "variable": "monthly_mean",
-                    "year":     [str(y) for y in range(1993, now.year + 1)],
-                    "month":    [f"{m:02d}" for m in range(1, 13)],
-                    "version":  "vdt2024",
-                },
-                str(nc_path.with_suffix(".zip")),
-            )
-            # Unzip and locate NetCDF
-            import zipfile
-            with zipfile.ZipFile(str(nc_path.with_suffix(".zip")), "r") as zf:
-                nc_names = [n for n in zf.namelist() if n.endswith(".nc")]
-                if nc_names:
-                    zf.extract(nc_names[0], str(DATA_DIR))
-                    extracted = DATA_DIR / nc_names[0]
+    now     = datetime.utcnow()
+    c       = _get_cds_client()
+    nc_dir  = DATA_DIR / "ssh_yearly"
+    nc_dir.mkdir(exist_ok=True)
+
+    # Download year by year to stay within CDS request size limits
+    print("Downloading satellite sea level anomaly 1993-present from CDS (year by year)...")
+    datasets = []
+    for year in range(1993, now.year + 1):
+        nc_path  = nc_dir / f"ssh_{year}.nc"
+        zip_path = nc_dir / f"ssh_{year}.zip"
+
+        if nc_path.exists():
+            print(f"  {year}: using cached {nc_path.name}")
+        else:
+            try:
+                _download_ssh_year(c, year, zip_path)
+                with zipfile.ZipFile(str(zip_path), "r") as zf:
+                    nc_names = [n for n in zf.namelist() if n.endswith(".nc")]
+                    if not nc_names:
+                        print(f"  {year}: no .nc in zip, skipping")
+                        zip_path.unlink(missing_ok=True)
+                        continue
+                    zf.extract(nc_names[0], str(nc_dir))
+                    extracted = nc_dir / nc_names[0]
                     if extracted != nc_path:
                         extracted.rename(nc_path)
-            nc_path.with_suffix(".zip").unlink(missing_ok=True)
-            print(f"Downloaded -> {nc_path} ({nc_path.stat().st_size // 1024} kB)")
+                zip_path.unlink(missing_ok=True)
+                print(f"  {year}: downloaded ({nc_path.stat().st_size // 1024} kB)")
+            except Exception as e:
+                print(f"  {year}: WARNING download failed: {e}")
+                zip_path.unlink(missing_ok=True)
+                continue
+
+        try:
+            datasets.append(xr.open_dataset(nc_path))
         except Exception as e:
-            print(f"WARNING: SSH download failed: {e}")
-            print("  SSH trend will not be available.")
-            return
-    else:
-        print(f"Using cached {nc_path}")
+            print(f"  {year}: WARNING could not open: {e}")
+
+    if not datasets:
+        print("WARNING: no SSH data downloaded — SSH trend not available.")
+        return
 
     try:
-        import xarray as xr
-        ds      = xr.open_dataset(nc_path)
+        ds      = xr.concat(datasets, dim="time")
         sla_var = next(
             (v for v in ds.data_vars if "sla" in v.lower() or "sea_level" in v.lower()),
             list(ds.data_vars)[0],
         )
-        da      = ds[sla_var]
-        dims    = set(da.dims)
-        lat_dim  = next(d for d in dims if d in ("latitude", "lat"))
-        lon_dim  = next(d for d in dims if d in ("longitude", "lon"))
-        time_dim = next(d for d in dims if "time" in d.lower())
+        da       = ds[sla_var]
+        lat_dim  = next(d for d in da.dims if d in ("latitude", "lat"))
+        lon_dim  = next(d for d in da.dims if d in ("longitude", "lon"))
+        time_dim = next(d for d in da.dims if "time" in d.lower())
         da       = da.sortby(time_dim)
 
-        lats     = da[lat_dim].values
-        lons     = da[lon_dim].values
+        lats = da[lat_dim].values
+        lons = da[lon_dim].values
 
         # Subsample to ~2-degree resolution
-        dlat = abs(float(lats[1] - lats[0])) if len(lats) > 1 else 0.25
-        dlon = abs(float(lons[1] - lons[0])) if len(lons) > 1 else 0.25
+        dlat  = abs(float(lats[1] - lats[0])) if len(lats) > 1 else 0.25
+        dlon  = abs(float(lons[1] - lons[0])) if len(lons) > 1 else 0.25
         s_lat = max(1, round(2.0 / dlat))
         s_lon = max(1, round(2.0 / dlon))
         da_sub   = da.isel({lat_dim: slice(None, None, s_lat),
@@ -381,12 +404,12 @@ def compute_ssh_trend():
         lons_s   = da_sub[lon_dim].values
         lons_180 = np.where(lons_s > 180, lons_s - 360, lons_s)
 
-        data_3d  = da_sub.values.astype(float)   # SLA in metres
+        data_3d = da_sub.values.astype(float)
         if data_3d.ndim == 4:
             data_3d = data_3d[:, 0, :, :]
         T = data_3d.shape[0]
 
-        # Trend in cm/decade (SLA in m -> * 100 = cm, already per decade from helper)
+        # Trend in cm/decade
         trend = _ols_slope_per_decade(np.arange(T), data_3d) * 100.0
 
         period_str = f"1993-{now.year}"
